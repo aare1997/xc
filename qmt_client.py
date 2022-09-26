@@ -152,38 +152,39 @@ def qmt_tick_update(data, codelist, freqs, klines):
 
     day_list = []
     jrzt = []
-    return
-    for k in data:
-        
-        for y in ["diff"]:
-            new = {}
-            new["code"] = y["f12"]
-            if new["code"] not in codelist:
-                continue
-            new["close"] = y["f2"]
-            new["high"] = y["f15"]
-            new["low"] = y["f16"]
-            new["open"] = y["f17"]
-            new["volume"] = y["f5"] * 100
-            new["amount"] = y["f6"]
-            if new["close"] == "-" or new["amount"] == "-":
-                continue
 
-            new["date"] = TODAY_DATETIME
-            new["time"] = dt.now().strftime("%H:%M:00")
-            # tick_update_klines_right(new["code"], new, klines, TODAY_STR)
-            del new["time"]
-            new["volume"] = float(y["f5"])
-            day_list.append(new)
-            if y["f3"] != "-" and float(y["f3"]) > 7.0:
-                if (y["f15"] - y["f18"]) / (y["f18"]) > 0.09:
-                    jrzt.append(new["code"])
-    dfs = klines_to_df(klines, freqs)
+    for k in data:
+        v = data[k]
+
+        new = {}
+        new["code"] = k[:6]
+        # if new["code"] not in codelist:
+        #     continue
+        new["close"] = float(v["lastPrice"])
+        new["high"] = float(v["high"])
+        new["low"] = float(v["low"])
+        new["open"] = float(v["open"])
+        new["volume"] = float(v["volume"])
+        new["amount"] = float(v["amount"])
+        if new["close"] == "-" or new["amount"] == 0.0:
+            continue
+
+        new["date"] = TODAY_DATETIME
+        new["time"] = dt.now().strftime("%H:%M:00")
+        # tick_update_klines_right(new["code"], new, klines, TODAY_STR)
+        del new["time"]
+
+        day_list.append(new)
+        if (1 - v['lastPrice'] / v['lastClose']) * 100 > 7.0:
+            if ((v["high"] - v['lastClose']) / (v['lastClose'])) > 0.09:
+                jrzt.append(new["code"])
+    # dfs = klines_to_df(klines, freqs)
 
     day = pd.DataFrame(day_list)
-    dfs["day"] = day
+    print(day)
+    # dfs["day"] = day
     # update_jrzt(jrzt)
-    return dfs
+    return day
 
 
 g_jrzt = []
@@ -234,7 +235,7 @@ def sub(code):
 
     def callback(a, b, c, data):
         jdata = orjson.loads(data)["data"]
-        print(jdata)
+        # print(jdata)
         qmt_tick_update(jdata, stock_code, stock_freqs, kline)
 
     x.callback = callback
