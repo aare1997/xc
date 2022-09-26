@@ -175,12 +175,14 @@ def qmt_tick_update(data, codelist, freqs, klines):
         del new["time"]
 
         day_list.append(new)
-        if (1 - v['lastPrice'] / v['lastClose']) * 100 > 7.0:
+        if (v['lastPrice'] / v['lastClose'] - 1) * 100 > 7.0:
+
             if ((v["high"] - v['lastClose']) / (v['lastClose'])) > 0.09:
                 jrzt.append(new["code"])
     # dfs = klines_to_df(klines, freqs)
 
     day = pd.DataFrame(day_list)
+    print(len(jrzt))
     print(day)
     # dfs["day"] = day
     # update_jrzt(jrzt)
