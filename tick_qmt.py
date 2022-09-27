@@ -16,6 +16,11 @@ import simplejson
 from QAPUBSUB.consumer import subscriber, subscriber_routing
 from QAPUBSUB.producer import publisher, publisher_topic
 
+class SUB:
+	pass
+	
+sub_param = SUB()
+today_str=datetime.datetime.now().strftime("%Y%m%d")
 
 
 class MyCustomEncoder(json.JSONEncoder):
@@ -62,21 +67,33 @@ def init(ct):
 	# ContextInfo.trade_code_list=['601398.SH','601857.SH','601288.SH','000333.SZ','002415.SZ','000002.SZ']
 	# ContextInfo.set_universe(ContextInfo.trade_code_list)
 	# ContextInfo.accID = '6000000058'
+	ct.set_account(account_cookie)
+	sub = subscriber_routing(exchange='qmt_sub_control', routing_key='', host=eventmq_ip)
+	sub.callback = qmt_sub_control
+	threading.Thread(target=sub.start, daemon=True).start()
+	
 	ct.stock = [ct.stockcode + '.' + ct.market]
 	print(ct.stock)
-	code_dict['hsa'] = ct.get_stock_list_in_sector('沪深A股')
-	code_dict['vol_dict'] = {}
-	for stock in code_dict['hsa']:
-		vol_dict[stock] = ct.get_last_volume(stock)
-	ct.run_time("f","3nSecond","2019-10-14 13:20:00")
-	code_dict['hsa']=code_dict['hsa'][:3]
-	print(len(code_dict['hsa']))
+	sub_param.full_code = ct.get_stock_list_in_sector('沪深A股')
+	sub_param.vol_dict= {}
+	for stock in sub_param.full_code:
+		sub_param.vol_dict[stock] = ct.get_last_volume(stock)
+	ct.run_time("f","3nSecond","2019-10-14 13:20:00")#
+	sub_param.ct=ct
+	#code_dict['hsa']=code_dict['hsa'][:]
+
 	
+
 def f(ct):
 	t0 = time.time()
-	full_tick = ct.get_full_tick(code_dict['hsa'])
+	full_tick = ct.get_full_tick(sub_param.full_code)
 	print(len(full_tick))
-	pub_msg(ct,full_tick, 'abc')
+	get_today_min(sub_param.full_code,today_str)
+	#pub_msg(ct,full_tick, 'abc')
+	
+	#for codex in code_dict['hsa']:
+
+
 	return
 	
 	total_market_value = 0
@@ -98,7 +115,18 @@ def f(ct):
 	print(f'A股加权涨幅 {round(total_ratio,2)}% 函数运行耗时{round(time.time()- t0,5)}秒')
 	
 	
+def get_today_min(codelist,start):
+	for code in codelist:
+		df = sub_param.ct.get_market_data(['open','high','low','close','amount','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period='1m')
+
+		
+
+	pass
+	
+	
+	
 def handlebar(ct):
+	#get_today_min(sub_param.full_code,today_str)
 	return
 	print('handlebar now:',datetime.datetime.now())
 	full_tick = ct.get_full_tick(code_dict['hsa'])
@@ -138,4 +166,13 @@ def pub_msg(ct, h, topics):
     print('len:', len(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder )))
 
     tick_full.pub(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder ),   routing_key='full')
+
+
+def qmt_sub_control(ContextInfo, a, b, data):
+    try:
+        r = json.loads(data)
+        print(r)
+
+    except:
+        pass
 

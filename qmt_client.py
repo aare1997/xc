@@ -26,6 +26,10 @@ STOP_AT1500 = 900
 START_AT0924 = 564
 
 
+def tick_to_min(tick):
+    return int(tick[:2]) * 60 + int(tick[3:5])
+
+
 def klines_to_df(klines, freqs, use_polars=False):
     start = time.time()
     retx = {}
@@ -158,8 +162,8 @@ def qmt_tick_update(data, codelist, freqs, klines):
 
         new = {}
         new["code"] = k[:6]
-        # if new["code"] not in codelist:
-        #     continue
+        if new["code"] not in codelist:
+            continue
         new["close"] = float(v["lastPrice"])
         new["high"] = float(v["high"])
         new["low"] = float(v["low"])
@@ -171,22 +175,22 @@ def qmt_tick_update(data, codelist, freqs, klines):
 
         new["date"] = TODAY_DATETIME
         new["time"] = dt.now().strftime("%H:%M:00")
-        # tick_update_klines_right(new["code"], new, klines, TODAY_STR)
+        tick_update_klines_right(new["code"], new, klines, TODAY_STR)
         del new["time"]
 
         day_list.append(new)
-        if (v['lastPrice'] / v['lastClose'] - 1) * 100 > 7.0:
+        if (v["lastPrice"] / v["lastClose"] - 1) * 100 > 7.0:
 
-            if ((v["high"] - v['lastClose']) / (v['lastClose'])) > 0.09:
+            if ((v["high"] - v["lastClose"]) / (v["lastClose"])) > 0.09:
                 jrzt.append(new["code"])
-    # dfs = klines_to_df(klines, freqs)
+
+    dfs = klines_to_df(klines, freqs)
 
     day = pd.DataFrame(day_list)
-    print(len(jrzt))
-    print(day)
-    # dfs["day"] = day
-    # update_jrzt(jrzt)
-    return day
+
+    dfs["day"] = day
+    update_jrzt(jrzt)
+    return dfs
 
 
 g_jrzt = []
@@ -238,10 +242,14 @@ def sub(code):
     def callback(a, b, c, data):
         jdata = orjson.loads(data)["data"]
         # print(jdata)
-        qmt_tick_update(jdata, stock_code, stock_freqs, kline)
+        dfs = qmt_tick_update(jdata, stock_code, stock_freqs, kline)
+        for x in dfs:
+            print(x, dfs[x])
 
     x.callback = callback
     x.start()
 
 
-sub()
+if __name__ == "__main__":
+
+    sub()
