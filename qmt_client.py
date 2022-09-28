@@ -241,7 +241,7 @@ def sub(code):
 
     def callback(a, b, c, data):
         jdata = orjson.loads(data)["data"]
-        # print(jdata)
+        print(jdata)
         dfs = qmt_tick_update(jdata, stock_code, stock_freqs, kline)
         for x in dfs:
             print(x, dfs[x])

@@ -11,9 +11,10 @@ import pymongo
 import time
 import datetime
 import threading
-import simplejson 
+from aare.noqa import *
 
-from QAPUBSUB.consumer import subscriber, subscriber_routing
+from QAPUBSUB.consumer import subscriber, subscriber_topic, subscriber_routing
+
 from QAPUBSUB.producer import publisher, publisher_topic
 
 class SUB:
@@ -21,7 +22,7 @@ class SUB:
 	
 sub_param = SUB()
 today_str=datetime.datetime.now().strftime("%Y%m%d")
-
+param=SUB()
 
 class MyCustomEncoder(json.JSONEncoder):
     def iterencode(self, obj, _one_shot=False):
@@ -59,7 +60,11 @@ vol_dict={}
 mongo_ip = '127.0.0.1'
 eventmq_ip = '127.0.0.1'
 account_cookie = '230041917'
+
 tick_full = publisher_topic(exchange='stock_tick_full',routing_key='', host=eventmq_ip)
+tick_amx = publisher_topic(exchange='stock_tick_amx',routing_key='', host=eventmq_ip)
+tick_position=publisher_topic(exchange='stock_tick_position',routing_key='', host=eventmq_ip)
+tick_open=publisher_topic(exchange='stock_tick_open',routing_key='', host=eventmq_ip)
 
 def init(ct):
 	#hs300成分股中sh和sz市场各自流通市值最大的前3只股票
@@ -68,12 +73,15 @@ def init(ct):
 	# ContextInfo.set_universe(ContextInfo.trade_code_list)
 	# ContextInfo.accID = '6000000058'
 	ct.set_account(account_cookie)
-	sub = subscriber_routing(exchange='qmt_sub_control', routing_key='', host=eventmq_ip)
-	sub.callback = qmt_sub_control
+	sub = subscriber_topic(exchange='qmtin_control', routing_key='', host=eventmq_ip)
+	sub.callback = qmtin_control
+	param.code_nost=code_list_to_qmt(jl_read('code_nost'))
+	param.code_amx = code_list_to_qmt(jl_read('code_amx'))
+	
+	
 	threading.Thread(target=sub.start, daemon=True).start()
 	
-	ct.stock = [ct.stockcode + '.' + ct.market]
-	print(ct.stock)
+
 	sub_param.full_code = ct.get_stock_list_in_sector('沪深A股')
 	sub_param.vol_dict= {}
 	for stock in sub_param.full_code:
@@ -81,14 +89,17 @@ def init(ct):
 	ct.run_time("f","3nSecond","2019-10-14 13:20:00")#
 	sub_param.ct=ct
 	#code_dict['hsa']=code_dict['hsa'][:]
+	ct.subscribe_whole_quote(['SH', 'SZ'], on_quote_full)
 
+def on_quote_full(datas):
+	pub_msg(sub_param.ct,datas,'quote')
 	
 
 def f(ct):
 	t0 = time.time()
 	full_tick = ct.get_full_tick(sub_param.full_code)
 	print(len(full_tick))
-	get_today_min(sub_param.full_code,today_str)
+	get_day_min(sub_param.full_code[5],today_str,type='tick')
 	#pub_msg(ct,full_tick, 'abc')
 	
 	#for codex in code_dict['hsa']:
@@ -115,9 +126,9 @@ def f(ct):
 	print(f'A股加权涨幅 {round(total_ratio,2)}% 函数运行耗时{round(time.time()- t0,5)}秒')
 	
 	
-def get_today_min(codelist,start):
+def get_day_min(codelist,start,type='1m'):
 	for code in codelist:
-		df = sub_param.ct.get_market_data(['open','high','low','close','amount','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period='1m')
+		df = sub_param.ct.get_market_data(['open','high','low','close','amount','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
 
 		
 
@@ -168,8 +179,9 @@ def pub_msg(ct, h, topics):
     tick_full.pub(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder ),   routing_key='full')
 
 
-def qmt_sub_control(ContextInfo, a, b, data):
+def qmtin_control(ct, a, b, data):
     try:
+        print(ct, a, b, data)
         r = json.loads(data)
         print(r)
 

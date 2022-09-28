@@ -339,9 +339,7 @@ class NpEncoder(json.JSONEncoder):
 
 
 def get_min_from_open():
-    t_open = datetime.datetime.strptime(
-        datetime.date.today().strftime("%Y-%m-%d 9:30:00"), "%Y-%m-%d %H:%M:%S"
-    )
+    t_open = datetime.datetime.strptime(datetime.date.today().strftime("%Y-%m-%d 9:30:00"), "%Y-%m-%d %H:%M:%S")
     t_now = datetime.datetime.now()
     th = 1
     if t_now > t_open:
@@ -357,3 +355,47 @@ def get_min_from_open():
         real_min = 240
 
     return real_min
+
+
+def code_append_market(code):
+    if code[0] == "6":
+        return code + '.SH'
+    if code[0] == "3":
+        return code + ".SZ"
+    if code[0] == '0':
+        return code + ".SZ"
+    return code
+
+def code_list_to_qmt(codex):
+    return [code_append_market(x) for x in codex]
+
+
+class Py36JsonEncoder(json.JSONEncoder):
+    def iterencode(self, obj, _one_shot=False):
+        
+        if isinstance(obj, float):
+            yield format(obj, '.2f')
+        elif isinstance(obj, dict):
+            last_index = len(obj) - 1
+            yield '{'
+            i = 0
+            for key, value in obj.items():
+                yield '"' + key + '": '
+                for chunk in Py36JsonEncoder.iterencode(self, value):
+                    yield chunk
+                if i != last_index:
+                    yield","
+                i+=1
+            yield '}'
+        elif isinstance(obj, list):
+            last_index = len(obj) - 1
+            yield"["
+            for i, o in enumerate(obj):
+                for chunk in Py36JsonEncoder.iterencode(self, o):
+                    yield chunk
+                if i != last_index:
+                    yield","
+            yield"]"
+        else:
+            for chunk in json.JSONEncoder.iterencode(self, obj):
+                yield chunk
