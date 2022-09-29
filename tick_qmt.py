@@ -10,6 +10,7 @@ import queue
 import pymongo
 import time
 import datetime
+from datetime import datetime as dt
 import threading
 from aare.noqa import *
 
@@ -61,50 +62,70 @@ mongo_ip = '127.0.0.1'
 eventmq_ip = '127.0.0.1'
 account_cookie = '230041917'
 
+time_now = dt.now()
+trade_start = dt.strptime(time_now.strftime("%Y-%m-%d 09:19:00"), "%Y-%m-%d %H:%M:%S")
+trade_open_stop=dt.strptime(time_now.strftime("%Y-%m-%d 09:25:25"), "%Y-%m-%d %H:%M:%S")
+trade_mid_stop=dt.strptime(time_now.strftime("%Y-%m-%d 11:30:05"), "%Y-%m-%d %H:%M:%S")
+trade_mid_start=dt.strptime(time_now.strftime("%Y-%m-%d 13:00:00"), "%Y-%m-%d %H:%M:%S")
+trade_end = dt.strptime(time_now.strftime("%Y-%m-%d 15:01:00"), "%Y-%m-%d %H:%M:%S")
+
 tick_full = publisher_topic(exchange='stock_tick_full',routing_key='', host=eventmq_ip)
 tick_amx = publisher_topic(exchange='stock_tick_amx',routing_key='', host=eventmq_ip)
 tick_position=publisher_topic(exchange='stock_tick_position',routing_key='', host=eventmq_ip)
 tick_open=publisher_topic(exchange='stock_tick_open',routing_key='', host=eventmq_ip)
 
+def stock_trading_time():
+	now = datetime.datetime.now()
+	if now < trade_start or now < trade_end:
+		return False
+
+	if now > trade_mid_stop and now < trade_mid_start:
+		return False
+	return True
+
+def stock_open_time():
+	now = datetime.datetime.now()
+	if now > trade_start and now < trade_open_stop:
+		return True
+	else:
+		return False
+		
+	
 def init(ct):
-	#hs300成分股中sh和sz市场各自流通市值最大的前3只股票
-    #hs300成分股中sh和sz市场各自流通市值最大的前3只股票
-	# ContextInfo.trade_code_list=['601398.SH','601857.SH','601288.SH','000333.SZ','002415.SZ','000002.SZ']
-	# ContextInfo.set_universe(ContextInfo.trade_code_list)
-	# ContextInfo.accID = '6000000058'
 	ct.set_account(account_cookie)
-	sub = subscriber_topic(exchange='qmtin_control', routing_key='', host=eventmq_ip)
+	sub = subscriber_routing(exchange='qmtin_control', routing_key='', host=eventmq_ip)
 	sub.callback = qmtin_control
+	threading.Thread(target=sub.start, daemon=True).start()
+	
 	param.code_nost=code_list_to_qmt(jl_read('code_nost'))
 	param.code_amx = code_list_to_qmt(jl_read('code_amx'))
 	
+	#sub_param.full_code = ct.get_stock_list_in_sector('沪深A股')
+
+	if stock_open_time():
+		ct.run_time("open_tick_run","5nSecond","2019-10-14 13:20:00")
+		param.open_time_run = True
+	else:
+		param.open_time_run = False
 	
-	threading.Thread(target=sub.start, daemon=True).start()
+		
+	ct.subscribe_whole_quote(['SH', 'SZ'], full_quote_cb)
+	param.ct=ct
+
+
+def full_quote_cb(data):
+	print(f"whole quote call back: {len(data)}")
+	tick_full.pub(json.dumps({'topic': 'quote', 'data': data},cls=MyCustomEncoder ),   routing_key='full')
 	
 
-	sub_param.full_code = ct.get_stock_list_in_sector('沪深A股')
-	sub_param.vol_dict= {}
-	for stock in sub_param.full_code:
-		sub_param.vol_dict[stock] = ct.get_last_volume(stock)
-	ct.run_time("f","3nSecond","2019-10-14 13:20:00")#
-	sub_param.ct=ct
-	#code_dict['hsa']=code_dict['hsa'][:]
-	ct.subscribe_whole_quote(['SH', 'SZ'], on_quote_full)
-
-def on_quote_full(datas):
-	pub_msg(sub_param.ct,datas,'quote')
-	
-
-def f(ct):
-	t0 = time.time()
-	full_tick = ct.get_full_tick(sub_param.full_code)
-	print(len(full_tick))
-	get_day_min(sub_param.full_code[5],today_str,type='tick')
-	#pub_msg(ct,full_tick, 'abc')
-	
-	#for codex in code_dict['hsa']:
-
-
+def open_tick_run(ct):
+	if param.open_time_run:
+		full_tick = ct.get_full_tick(param.code_nost)
+		tick_open.pub(json.dumps({'topic': 'open', 'data': full_tick},cls=MyCustomEncoder ),   routing_key='open')
+		print(f'open time pub')
+		if dt.now() > trade_open_stop:
+			param.open_time_run = False
+			
 	return
 	
 	total_market_value = 0
@@ -128,8 +149,9 @@ def f(ct):
 	
 def get_day_min(codelist,start,type='1m'):
 	for code in codelist:
-		df = sub_param.ct.get_market_data(['open','high','low','close','amount','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
-
+		#df = sub_param.ct.get_market_data(['open','high','low','close','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
+		df = sub_param.ct.get_market_data([],stock_code=['300416'],start_time=start,end_time='',dividend_type='front',period=type)
+		print(df)
 		
 
 	pass
@@ -174,8 +196,6 @@ def handlebar(ct):
 	print('=============================================')
 
 def pub_msg(ct, h, topics):
-    print('len:', len(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder )))
-
     tick_full.pub(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder ),   routing_key='full')
 
 
