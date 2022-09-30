@@ -229,14 +229,161 @@ def update_jrzt(jrzt):
     jltmp_write(g_jrzt, key="tick_jrzt")
 
 
+def tick_open_update_klines(code, tick, klines):
+    kl = klines[code]
+    price = float(tick["bidPrice"])
+
+    dt_hm = tick_to_min(tick["time"][0:5])
+    if dt_hm < START_AT0930:
+        dt_hm = 570
+        tick["time"] = "09:30:00"
+
+    for x in kl:
+        divx = int(x)
+        old_bar = kl[x]
+        dt_end_hm = tick_to_min(old_bar["time_end"][0:5])
+        need_new = 0
+        if len(old_bar["data"]) > 0:
+            if dt_hm >= dt_end_hm:
+                need_new = 1
+                if dt_hm >= STOP_AT1500 or (dt_hm >= STOP_AT1130 and dt_hm < STOP_AT1300):
+                    # print(f"no need {x} new at :{dt_hm}")
+                    need_new = 0
+
+        if len(old_bar["data"]) == 0 or need_new == 1:
+            new = {}
+
+            new["code"] = code
+            new["open"] = price
+            new["close"] = price
+            new["high"] = price
+            new["low"] = price
+            new["volume"] = float(tick["volume"]) - kl[x]["vol_last"]
+            new["amount"] = float(tick["amount"]) - kl[x]["am_last"]
+            new['bidPrice'] = tick['bidPrice']
+            new['bidVol'] = tick['bidVol']
+            new['bidAmount'] = tick['bidAmount']
+            new['askPrice'] = tick['askPrice']
+            new['askVol'] = tick['askVol']
+            new['askAmount'] = tick['askAmount']
+
+            th = int(tick["time"][0:2])
+            tm = int(tick["time"][3:5])
+            if int(x) == 60 and (th == 10 or th == 9):
+                # new_time= "{}:{}:00".format(str(th).zfill(2), str(int(tm / divx) * divx).zfill(2))
+                if th == 9:
+                    new_time = "09:30:00"
+                else:
+                    new_time = "10:30:00"
+
+            else:
+                new_time = "{}:{}:00".format(str(th).zfill(2), str(int(tm / divx) * divx).zfill(2))
+
+            kl[x]["time_start"] = new_time
+            end_time = dt.strptime(new_time, "%H:%M:%S") + timedelta(minutes=divx)
+            end_time_str = end_time.strftime("%H:%M:00")
+            kl[x]["time_end"] = end_time_str
+            kl[x]["time_update"] = tick["time"]
+            new["datetime"] = dt.strptime(f"{TODAY_STR} {end_time_str}", "%Y-%m-%d %H:%M:%S")
+            kl[x]["data"].append(new)
+
+            if len(kl[x]["data"]) > 1:
+                kl[x]["vol_start"] = kl[x]["vol_last"]
+                kl[x]["am_start"] = kl[x]["am_last"]
+            # print(f"new {x} :\n {kl[x]}")
+
+        else:
+            last = old_bar["data"][-1]
+            if price > last["high"]:
+                last["high"] = price
+            if price < last["low"]:
+                last["low"] = price
+            last["close"] = price
+            last["amount"] = float(tick["amount"]) - kl[x]["am_start"]
+            last["volume"] = float(tick["volume"]) - kl[x]["vol_start"]
+            last['bidPrice'] = tick['bidPrice']
+            last['bidVol'] = tick['bidVol']
+            last['bidAmount'] = tick['bidAmount']
+            last['askPrice'] = tick['askPrice']
+            last['askVol'] = tick['askVol']
+            last['askAmount'] = tick['askAmount']
+
+            kl[x]["time_update"] = tick["time"]
+            kl[x]["am_last"] = float(tick["amount"])
+            kl[x]["vol_last"] = float(tick["volume"])
+            # if int(x) > 1:
+            #     print(f"update {x}:\n {kl[x]}")
+
+
+def qmt_open_tick(data, codelist, freqs, klines):
+    day_list = []
+    for k in data:
+        v = data[k]
+
+        new = {}
+        new["code"] = k[:6]
+        if new["code"] not in codelist:
+            continue
+        new["close"] = float(v["lastPrice"])
+        new["high"] = float(v["high"])
+        new["low"] = float(v["low"])
+        new["open"] = float(v["open"])
+        new['askPrice'] = float(v['askPrice'][0])
+        new['askVol'] = float(v['askVol'][0])
+        new['askAmount'] = new['askPrice'] * new['askVol'] * 100
+        new['bidPrice'] = float(v['bidPrice'][0])
+        new['bidVol'] = float(v['bidVol'][0])
+        new['bidAmount'] = new['bidPrice'] * new['bidVol'] * 100
+        new["volume"] = float(v["volume"])
+        new["amount"] = float(v["amount"])
+        if new['bidAmount'] == 0.0 or new['askAmount'] == 0.0:
+            continue
+
+        new["date"] = TODAY_DATETIME
+        new["time"] = dt.now().strftime("%H:%M:%S")
+        tick_open_update_klines(new["code"], new, klines)
+        del new["time"]
+
+        day_list.append(new)
+
+    dfs = klines_to_df(klines, freqs)
+    day = pd.DataFrame(day_list)
+    dfs["day"] = day
+
+    return dfs
+
+
+def run_open():
+    exchange = "stock_tick_open"
+    routing_key = "open"
+    print("Running open mode")
+    x = subscriber_topic(host=eventmq_ip, exchange=exchange, routing_key=routing_key)
+    freqs = [1]
+    kline = new_klines(stock_code, freqs)
+
+    def callback(a, b, c, data):
+        jdata = orjson.loads(data)["data"]
+        # print(jdata)
+
+        dfs = qmt_open_tick(jdata, stock_code, freqs, kline)
+
+        for x in dfs:
+            print(x, dfs[x])
+
+    x.callback = callback
+    x.start()
+
+
 stock_code = jl_read("code_nost")
 stock_freqs = [1, 15, 30, 60]
 
 
-@click.command()
-@click.option("--code", default="rb1910")
-def sub(code):
-    x = subscriber_topic(host=eventmq_ip, exchange="stock_tick_full", routing_key="full")
+def run_quote():
+    exchange = "stock_tick_full"
+    routing_key = "full"
+    print("Running quote full mode")
+    x = subscriber_topic(host=eventmq_ip, exchange=exchange, routing_key=routing_key)
+
     kline = new_klines(stock_code, stock_freqs)
 
     def callback(a, b, c, data):
@@ -248,6 +395,17 @@ def sub(code):
 
     x.callback = callback
     x.start()
+
+
+@click.command()
+@click.option("--code", default="rb1910")
+@click.option("--open", is_flag=True, default=False)
+def sub(code, open):
+    if open:
+
+        run_open()
+    else:
+        run_quote()
 
 
 if __name__ == "__main__":

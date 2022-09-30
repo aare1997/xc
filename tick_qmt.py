@@ -63,7 +63,7 @@ eventmq_ip = '127.0.0.1'
 account_cookie = '230041917'
 
 time_now = dt.now()
-trade_start = dt.strptime(time_now.strftime("%Y-%m-%d 09:19:00"), "%Y-%m-%d %H:%M:%S")
+trade_start = dt.strptime(time_now.strftime("%Y-%m-%d 09:16:00"), "%Y-%m-%d %H:%M:%S")
 trade_open_stop=dt.strptime(time_now.strftime("%Y-%m-%d 09:25:25"), "%Y-%m-%d %H:%M:%S")
 trade_mid_stop=dt.strptime(time_now.strftime("%Y-%m-%d 11:30:05"), "%Y-%m-%d %H:%M:%S")
 trade_mid_start=dt.strptime(time_now.strftime("%Y-%m-%d 13:00:00"), "%Y-%m-%d %H:%M:%S")
@@ -102,14 +102,15 @@ def init(ct):
 	
 	#sub_param.full_code = ct.get_stock_list_in_sector('沪深A股')
 
-	if stock_open_time():
+	if dt.now() < trade_open_stop:
 		ct.run_time("open_tick_run","5nSecond","2019-10-14 13:20:00")
 		param.open_time_run = True
 	else:
 		param.open_time_run = False
 	
 		
-	ct.subscribe_whole_quote(['SH', 'SZ'], full_quote_cb)
+	#ct.subscribe_whole_quote(['SH', 'SZ'], full_quote_cb)
+	ct.subscribe_whole_quote(param.code_nost, full_quote_cb)
 	param.ct=ct
 
 
@@ -119,10 +120,11 @@ def full_quote_cb(data):
 	
 
 def open_tick_run(ct):
-	if param.open_time_run:
+	if param.open_time_run and dt.now() > trade_start:
+		
 		full_tick = ct.get_full_tick(param.code_nost)
 		tick_open.pub(json.dumps({'topic': 'open', 'data': full_tick},cls=MyCustomEncoder ),   routing_key='open')
-		print(f'open time pub')
+		print(f'open time pub: {len(full_tick)}')
 		if dt.now() > trade_open_stop:
 			param.open_time_run = False
 			
