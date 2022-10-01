@@ -117,6 +117,7 @@ def init(ct):
 def full_quote_cb(data):
 	print(f"whole quote call back: {len(data)}")
 	tick_full.pub(json.dumps({'topic': 'quote', 'data': data},cls=MyCustomEncoder ),   routing_key='full')
+	#get_min_nday(param.code_nost,'20220930','1m' )
 	
 
 def open_tick_run(ct):
@@ -149,19 +150,23 @@ def open_tick_run(ct):
 	print(f'A股加权涨幅 {round(total_ratio,2)}% 函数运行耗时{round(time.time()- t0,5)}秒')
 	
 	
-def get_day_min(codelist,start,type='1m'):
+def get_min_nday(codelist,start,type='1m'):
 	for code in codelist:
 		#df = sub_param.ct.get_market_data(['open','high','low','close','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
-		df = sub_param.ct.get_market_data([],stock_code=['300416'],start_time=start,end_time='',dividend_type='front',period=type)
+		df = param.ct.get_market_data(['open','high','low','close','volume','amount'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
+		
 		print(df)
 		
-
-	pass
+def get_tick_nday(codelist, start_day):
+	df=param.ct.get_market_data(['quoter'],stock_code=codelist, start_time=start_day, period='tick')
+	print(df)
+	return df
 	
 	
 	
 def handlebar(ct):
-	#get_today_min(sub_param.full_code,today_str)
+	#get_min_nday(param.code_amx[:3],'20220930',type='1m')
+	get_tick_nday(param.code_nost[:1],'20220930')
 	return
 	print('handlebar now:',datetime.datetime.now())
 	full_tick = ct.get_full_tick(code_dict['hsa'])
