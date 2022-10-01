@@ -30,7 +30,7 @@ def tick_to_min(tick):
     return int(tick[:2]) * 60 + int(tick[3:5])
 
 
-def klines_to_df(klines, freqs, use_polars=False):
+def klines_to_df(klines, freqs, use_polars=False, include_day=False):
     start = time.time()
     retx = {}
     for x in freqs:
@@ -41,6 +41,7 @@ def klines_to_df(klines, freqs, use_polars=False):
             if data:
                 retx[x].extend(data)
     mid = time.time()
+
     ret_df = {}
     for x in freqs:
         if use_polars:
@@ -49,6 +50,12 @@ def klines_to_df(klines, freqs, use_polars=False):
             ret_df[str(x) + "min"] = pd.DataFrame(retx[str(x)])
 
     end = time.time()
+    if include_day:
+        day_list = []
+        for x in g_day_df:
+            day_list.append(g_day_df[x])
+        ret_df['day'] = pd.DataFrame(day_list)
+
     # print(f"kline {mid-start:.2f}  dataframe {end-mid:.2f}")
 
     return ret_df
@@ -153,10 +160,8 @@ def tick_update_klines_right(code, tick, klines, date_str, has_time=False):
 
 
 def qmt_tick_update(data, codelist, freqs, klines):
-    day_list = []
-    jrzt = []
     global g_day_df
-
+    new_now = dt.now().strftime("%H:%M:00")
     for k in data:
         v = data[k]
 
@@ -174,29 +179,12 @@ def qmt_tick_update(data, codelist, freqs, klines):
             continue
 
         new["date"] = TODAY_DATETIME
-        new["time"] = dt.now().strftime("%H:%M:00")
+        new["time"] = new_now
         tick_update_klines_right(new["code"], new, klines, TODAY_STR)
         del new["time"]
 
         g_day_df[new["code"]] = new
-
-    # dfs = klines_to_df(klines, freqs)
-
-    # for x in g_day_df:
-    #     v = g_day_df[x]
-    #     day_list.append(g_day_df[x])
-    # if (v["lastPrice"] / v["lastClose"] - 1) * 100 > 7.0:
-    #     if ((v["high"] - v["lastClose"]) / (v["lastClose"])) > 0.09:
-    #         jrzt.append(new["code"])
-
-    # day = pd.DataFrame(day_list)
-
     return {}
-
-
-def update_day_df(new):
-    global g_day_df
-    g_day_df[new["code"]] = new
 
 
 g_jrzt = []
@@ -405,6 +393,8 @@ def east_mindata_to_klines(codelist, data, klines, freqs):
         if jdata is None:
             continue
         codex = jdata["code"]
+        if codex not in codelist:
+            continue
         last_v = 0.0
         last_am = 0.0
         min_data = []
@@ -412,8 +402,8 @@ def east_mindata_to_klines(codelist, data, klines, freqs):
         for line in jdata["klines"]:
             t, open, close, high, low, vol, am = line.split(",")
             xx = {}
-            if codex not in codelist:
-                continue
+            # if codex not in codelist:
+            #     continue
             xx["code"] = codex
             xx["open"] = float(open)
             xx["close"] = float(close)
@@ -452,11 +442,11 @@ def east_mindata_to_klines(codelist, data, klines, freqs):
         code_k["time_start"] = last_hm
         code_k["data"] = min_data
 
-    dfs = klines_to_df(klines, freqs)
+    # dfs = klines_to_df(klines, freqs)
     end = time.time()
     print(f"Stop code : {len(stop_code)}, {stop_code} ")
     print(f"parse 1min {end-start:.2f}")
-    return dfs
+    return None
 
 
 START_AT0930 = 570
@@ -503,7 +493,6 @@ def min1_update_klines_right(code, tick, klines, date_str, has_time=False):
             th = int(tick["time"][0:2])
             tm = int(tick["time"][3:5])
             if int(x) == 60 and (th == 10 or th == 9):
-                # new_time= "{}:{}:00".format(str(th).zfill(2), str(int(tm / divx) * divx).zfill(2))
                 if th == 9:
                     new_time = "09:30:00"
                 else:
@@ -533,12 +522,12 @@ def min1_update_klines_right(code, tick, klines, date_str, has_time=False):
             if tick["low"] < last["low"]:
                 last["low"] = tick["low"]
             last["close"] = tick["close"]
-            last["amount"] = float(tick["amount"]) + kl[x]["am_last"]
-            last["volume"] = float(tick["volume"]) + kl[x]["vol_last"]
+            last["amount"] = tick["amount"] + kl[x]["am_last"]
+            last["volume"] = tick["volume"] + kl[x]["vol_last"]
 
             kl[x]["time_update"] = tick["time"]
-        kl[x]["am_last"] += float(tick["amount"])
-        kl[x]["vol_last"] += float(tick["volume"])
+        kl[x]["am_last"] += tick["amount"]
+        kl[x]["vol_last"] += tick["volume"]
 
 
 g_db_name = "qmt_tick"
@@ -573,10 +562,11 @@ def run_quote():
             return
 
         if dt.now() > (last_write + timedelta(seconds=5)):
+            dfs = klines_to_df(kline, stock_freqs, include_day=True)
             for x in dfs:
                 ft_write_df(dfs[x], name=g_db_name, key_str=x)
-                last_write = dt.now()
-                # print(x, dfs[x])
+
+            last_write = dt.now()
 
     x.callback = callback
     x.start()
