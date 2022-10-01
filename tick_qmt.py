@@ -13,10 +13,12 @@ import datetime
 from datetime import datetime as dt
 import threading
 from aare.noqa import *
+from pathlib import Path
 
 from QAPUBSUB.consumer import subscriber, subscriber_topic, subscriber_routing
 
 from QAPUBSUB.producer import publisher, publisher_topic
+
 
 class SUB:
 	pass
@@ -24,36 +26,6 @@ class SUB:
 sub_param = SUB()
 today_str=datetime.datetime.now().strftime("%Y%m%d")
 param=SUB()
-
-class MyCustomEncoder(json.JSONEncoder):
-    def iterencode(self, obj, _one_shot=False):
-        
-        if isinstance(obj, float):
-            yield format(obj, '.2f')
-        elif isinstance(obj, dict):
-            last_index = len(obj) - 1
-            yield '{'
-            i = 0
-            for key, value in obj.items():
-                yield '"' + key + '": '
-                for chunk in MyCustomEncoder.iterencode(self, value):
-                    yield chunk
-                if i != last_index:
-                    yield","
-                i+=1
-            yield '}'
-        elif isinstance(obj, list):
-            last_index = len(obj) - 1
-            yield"["
-            for i, o in enumerate(obj):
-                for chunk in MyCustomEncoder.iterencode(self, o):
-                    yield chunk
-                if i != last_index:
-                    yield","
-            yield"]"
-        else:
-            for chunk in json.JSONEncoder.iterencode(self, obj):
-                yield chunk
 
 code_dict={}
 vol_dict={}
@@ -94,7 +66,7 @@ def stock_open_time():
 def init(ct):
 	ct.set_account(account_cookie)
 	sub = subscriber_routing(exchange='qmtin_control', routing_key='', host=eventmq_ip)
-	sub.callback = qmtin_control
+	sub.callback = qmtin_control_cb
 	threading.Thread(target=sub.start, daemon=True).start()
 	
 	param.code_nost=code_list_to_qmt(jl_read('code_nost'))
@@ -106,7 +78,8 @@ def init(ct):
 		ct.run_time("open_tick_run","5nSecond","2019-10-14 13:20:00")
 		param.open_time_run = True
 	else:
-		param.open_time_run = False
+		param.open_time_run = True
+		ct.run_time("open_tick_run","5nSecond","2019-10-14 13:20:00")
 	
 		
 	#ct.subscribe_whole_quote(['SH', 'SZ'], full_quote_cb)
@@ -116,7 +89,7 @@ def init(ct):
 
 def full_quote_cb(data):
 	print(f"whole quote call back: {len(data)}")
-	tick_full.pub(json.dumps({'topic': 'quote', 'data': data},cls=MyCustomEncoder ),   routing_key='full')
+	tick_full.pub(json.dumps({'topic': 'quote', 'data': data},cls=Py36JsonEncoder ),   routing_key='full')
 	#get_min_nday(param.code_nost,'20220930','1m' )
 	
 
@@ -124,11 +97,33 @@ def open_tick_run(ct):
 	if param.open_time_run and dt.now() > trade_start:
 		
 		full_tick = ct.get_full_tick(param.code_nost)
-		tick_open.pub(json.dumps({'topic': 'open', 'data': full_tick},cls=MyCustomEncoder ),   routing_key='open')
+		tick_open.pub(json.dumps({'topic': 'open', 'data': full_tick},cls=Py36JsonEncoder ),   routing_key='open')
 		print(f'open time pub: {len(full_tick)}')
 		if dt.now() > trade_open_stop:
 			param.open_time_run = False
 			
+	event=has_qmt_evnt()
+	if event:
+		try:
+			if event['control'] == 'get_tick':
+				df=get_tick_nday(event['code'], '20220930')
+				
+				if not df.empty:
+					print('will pub tick',df)
+					tick_amx.pub(json.dumps({'topic': "tick", 'data': df.to_json()},cls=Py36JsonEncoder ),   routing_key='tick')
+			elif event['control'] == 'get_min':
+				df = get_min_nday(event['code'],'20220930')
+				print(df)
+				df=df.reset_index()
+				if not df.empty:
+					print(f'will pub min:{event["code"]}')
+					tick_amx.pub(json.dumps({'topic': "tick", 'data': df.to_json(orient='records')},cls=Py36JsonEncoder ),   routing_key='min')
+			else:
+				print(f'no support: {event}')
+		except Exception as e:
+			print(f"error event: {e}, {e.__str__()}")
+			
+	
 	return
 	
 	total_market_value = 0
@@ -155,18 +150,18 @@ def get_min_nday(codelist,start,type='1m'):
 		#df = sub_param.ct.get_market_data(['open','high','low','close','volume'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
 		df = param.ct.get_market_data(['open','high','low','close','volume','amount'],stock_code=[code],start_time=start,end_time='',dividend_type='front',period=type)
 		
-		print(df)
+		return df
 		
 def get_tick_nday(codelist, start_day):
 	df=param.ct.get_market_data(['quoter'],stock_code=codelist, start_time=start_day, period='tick')
-	print(df)
+	
 	return df
 	
 	
 	
 def handlebar(ct):
 	#get_min_nday(param.code_amx[:3],'20220930',type='1m')
-	get_tick_nday(param.code_nost[:1],'20220930')
+	#get_tick_nday(param.code_nost[:1],'20220930')
 	return
 	print('handlebar now:',datetime.datetime.now())
 	full_tick = ct.get_full_tick(code_dict['hsa'])
@@ -203,15 +198,16 @@ def handlebar(ct):
 	print('=============================================')
 
 def pub_msg(ct, h, topics):
-    tick_full.pub(json.dumps({'topic': topics, 'data': h},cls=MyCustomEncoder ),   routing_key='full')
+    tick_full.pub(json.dumps({'topic': topics, 'data': h},cls=Py36JsonEncoder ),   routing_key='full')
 
 
-def qmtin_control(ct, a, b, data):
+def qmtin_control_cb(ct, a, b, data):
     try:
-        print(ct, a, b, data)
+        
         r = json.loads(data)
         print(r)
 
     except:
         pass
+
 

@@ -141,43 +141,6 @@ TEMP_JSONL_FILE = "z:/temp/stock_tmp.jsonl"
 SAVED_JSONL_FILE = "d:/Trader/aq/saved_json.jsonl"
 
 
-# def jl_write(data, key_str, file_name=None, position="hd", mode="w"):
-
-#     random_str = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
-
-#     if file_name is not None:
-#         fname = file_name
-#     elif position in ["tmp", "ram"]:
-#         fname = TEMP_JSONL_FILE
-#     else:
-#         fname = SAVED_JSONL_FILE
-
-#     random_name = fname + random_str
-
-#     if mode in ["n"]:
-#         open_mode = "w"
-#     else:
-#         open_mode = "a"
-
-#     content = {}
-
-#     if mode in ["w"]:
-#         if Path(fname).exists():
-#             with jsonl.open(fname, mode="r") as reader:
-#                 for row in reader:
-#                     for k, v in row.items():
-#                         content[k] = v
-#         content[key_str] = data
-
-#         with jsonl.open(fname, mode="w") as writer:
-#             for k, v in content.items():
-#                 writer.write({k: v})
-
-#     if mode in ["n"]:
-#         with jsonl.open(fname, mode=open_mode) as writer:
-#             writer.write({key_str: data})
-
-
 def jl_write(data, key_str, file_name=None, position="hd", mode="w"):
 
     random_str = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
@@ -366,13 +329,39 @@ def code_append_market(code):
         return code + ".SZ"
     return code
 
+
 def code_list_to_qmt(codex):
     return [code_append_market(x) for x in codex]
 
 
+QMT_EVENT_PATH = "Z:\\TEMP\\qmt\\"
+
+
+def has_qmt_evnt(key='sub_tick'):
+    file_name = QMT_EVENT_PATH + key
+    event_path = Path(QMT_EVENT_PATH)
+    event_list = list(event_path.glob(key + "*"))
+    if event_list:
+        ret = None
+        with open(event_list[0]) as f:
+            ret = json.load(f)
+        event_list[0].unlink()
+        return ret
+    return None
+
+
+def create_qmt_file_event(jsontext, key='sub_tick'):
+    event_name = Path(QMT_EVENT_PATH + key)
+    if event_name.exists():
+        random_str = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
+        event_name = Path(QMT_EVENT_PATH + key + random_str)
+    with open(event_name, 'w') as f:
+        f.write(jsontext)
+
+
 class Py36JsonEncoder(json.JSONEncoder):
     def iterencode(self, obj, _one_shot=False):
-        
+
         if isinstance(obj, float):
             yield format(obj, '.2f')
         elif isinstance(obj, dict):
@@ -384,18 +373,18 @@ class Py36JsonEncoder(json.JSONEncoder):
                 for chunk in Py36JsonEncoder.iterencode(self, value):
                     yield chunk
                 if i != last_index:
-                    yield","
-                i+=1
+                    yield ","
+                i += 1
             yield '}'
         elif isinstance(obj, list):
             last_index = len(obj) - 1
-            yield"["
+            yield "["
             for i, o in enumerate(obj):
                 for chunk in Py36JsonEncoder.iterencode(self, o):
                     yield chunk
                 if i != last_index:
-                    yield","
-            yield"]"
+                    yield ","
+            yield "]"
         else:
             for chunk in json.JSONEncoder.iterencode(self, obj):
                 yield chunk
