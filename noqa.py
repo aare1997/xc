@@ -11,6 +11,7 @@ import random
 import string
 import shutil
 import json
+import redis
 
 
 def toml_to_file(ctx, file):
@@ -23,7 +24,11 @@ def toml_load_file(file):
 
 
 STOCK_TMP_PATH = "Z:\\TEMP\\stock\\"
+TO_QMT_EVENT_PATH = "Z:\\TEMP\\to_qmt\\"
+FROM_QMT_PATH = "Z:\\TEMP\\from_qmt\\"
 Path(STOCK_TMP_PATH).mkdir(exist_ok=True)
+Path(TO_QMT_EVENT_PATH).mkdir(exist_ok=True)
+Path(FROM_QMT_PATH).mkdir(exist_ok=True)
 
 
 def ft_read_df(name="", key_str="", use_big_lock=False, reset=False):
@@ -334,12 +339,70 @@ def code_list_to_qmt(codex):
     return [code_append_market(x) for x in codex]
 
 
-QMT_EVENT_PATH = "Z:\\TEMP\\qmt\\"
+
+g_redis_conn = None
 
 
+def rd_connect():
+    global g_redis_conn
+    if g_redis_conn is None:
+        g_redis_conn = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+    return g_redis_conn
+
+
+def rd_set(key, val):
+    global g_redis_conn
+    if g_redis_conn is None:
+        g_redis_conn = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+    return g_redis_conn.set(key, val)
+
+
+def rd_get(key, default=[]):
+    global g_redis_conn
+    if g_redis_conn is None:
+        g_redis_conn = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+
+    ret = g_redis_conn.get(key)
+    if ret is None:
+        return default
+    return ret
+
+
+def rdj_set(key, val):
+    global g_redis_conn
+    if g_redis_conn is None:
+        g_redis_conn = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+    return g_redis_conn.set(key, json.dumps(val))
+
+
+def rdj_get(key, default=[]):
+    global g_redis_conn
+    if g_redis_conn is None:
+        g_redis_conn = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+
+    ret = g_redis_conn.get(key)
+    if ret is None:
+        jl_ret = jl_read(key, default=default)
+        if len(jl_ret) > 0:
+            rdj_set(key, jl_ret)
+        return jl_ret
+    return json.loads(ret)
+
+def rdj_queue_push(key, data):
+    conn = rd_connect()
+    if isinstance(data, str):
+        conn.lpush(key, data)
+    else:
+        conn.lpush(key, json.dumps(data))
+
+
+def rdj_queue_pop(key):
+    conn = rd_connect()
+    data = conn.rpop(key)
+    return data
 def has_qmt_evnt(key='sub_tick'):
-    file_name = QMT_EVENT_PATH + key
-    event_path = Path(QMT_EVENT_PATH)
+    file_name = TO_QMT_EVENT_PATH + key
+    event_path = Path(TO_QMT_EVENT_PATH)
     event_list = list(event_path.glob(key + "*"))
     if event_list:
         ret = None
@@ -351,10 +414,10 @@ def has_qmt_evnt(key='sub_tick'):
 
 
 def create_qmt_file_event(jsontext, key='sub_tick'):
-    event_name = Path(QMT_EVENT_PATH + key)
+    event_name = Path(TO_QMT_EVENT_PATH + key)
     if event_name.exists():
         random_str = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
-        event_name = Path(QMT_EVENT_PATH + key + random_str)
+        event_name = Path(TO_QMT_EVENT_PATH + key + random_str)
     with open(event_name, 'w') as f:
         f.write(jsontext)
 
