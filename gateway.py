@@ -17,8 +17,8 @@ from aare.qmt2qifi import *
 
 mongo_ip = '127.0.0.1'
 eventmq_ip = '127.0.0.1'
-account_cookie = '230041917'
-qmt_cookie=account_cookie
+
+qmt_cookie='230041917'
 XC_PREFIX='xcqmt_acc_'
 QMT_ACC = XC_PREFIX + qmt_cookie
 QMT_POSITIONS = XC_PREFIX + qmt_cookie + '_positions'
@@ -26,42 +26,9 @@ QMT_ORDERCB = XC_PREFIX + qmt_cookie + '_ordercb'
 QMT_ORDER = XC_PREFIX + qmt_cookie + '_order'
 
 
-"""
-on_order
-
-==> sell_open : sell_rq
-==> buy_close : buy_close_hq
-
-==> buy_open:  buy_normal / buy_rz
-==> sell_close:  sell_close_hk
-
-
-
-1/ init
-
-
-sell_rq + buy_normal
-
-
-hold => xxxxx
-
-
-2/ daily  => should hold
-
-buy_open  => buy_rz
-sell_open => sell_normal
-sell_close => sell_close_hk
-buy_close => buy_normal
-
-
-3/ lastday
-
-sell_close_hk
-"""
-
 
 database = pymongo.MongoClient(mongo_ip).QMTREALTIME
-pro = publisher_topic(exchange='QAQMTGateway', routing_key=account_cookie, host=eventmq_ip)
+pro = publisher_topic(exchange='QAQMTGateway', routing_key=qmt_cookie, host=eventmq_ip)
 holding = {}
 
 orderq = queue.Queue()
@@ -70,9 +37,8 @@ available_holding = {}
 
 
 def init(ct):
-
-    ct.set_account(account_cookie)
-    sub = subscriber_routing(exchange='QAQMTORDER', routing_key=account_cookie, host=eventmq_ip)
+    ct.set_account(qmt_cookie)
+    sub = subscriber_routing(exchange='QAQMTORDER', routing_key=qmt_cookie, host=eventmq_ip)
     sub.callback = qaorderrouter
 
     threading.Thread(target=sub.start, daemon=True).start()
@@ -82,8 +48,16 @@ def init(ct):
 
 def acc_timer_run(ct):
     print('timer run')
-    output_acc(qmt_cookie)
-    output_pos(qmt_cookie)
+    ipo_info(ct)
+    order_str = rdj_queue_pop(QMT_ORDER)
+
+    if order_str:
+        order = json.loads(order_str)
+        print(order)
+        one_order(ct, order)
+    #output_acc(qmt_cookie)
+    #output_pos(qmt_cookie)
+    
 
 def output_acc(cookie):
     accounts = get_trade_detail_data(cookie, 'stock', 'account')
@@ -94,45 +68,33 @@ def output_pos(cookie):
     positions = get_trade_detail_data(cookie, 'stock', 'position')
     pos_list = []
     for dt in positions:
-        px = unpack_data(dt)
+        px = unpack_data(dt, not_use=['m_dStockLastPrice','m_dStaticHoldMargin'])
         pos_list.append(px)
 
     if pos_list:
         rdj_set(QMT_POSITIONS, json.dumps(pos_list,cls=Py36JsonEncoder))
 
-def buy_normal(ContextInfo, order):
-    passorder(33, 1101, account_cookie,
-              order['code'], 4, -1, order['volume'], 'x', 2, 'qagateway', ContextInfo)
 
-    #smart_algo_passorder(33, 1101, account_cookie, order['code'],4, -1,order['volume'],'x',1,'qagateway',"TWAP",20,0,ContextInfo);
-
-
-def buy_close_hq(ContextInfo, order):
-    passorder(72, 1101, account_cookie,
-              order['code'], 5, -1, 100, 'x', 2, 'qagateway', ContextInfo)
+def ipo_info(ct):
+    ipo=get_ipo_data("STOCK")# 返回新股信息
+    for x in ipo:
+        print(x)
+        limit=get_new_purchase_limit()
 
 
-def sell_close_hk(ContextInfo, order):
-    passorder(74, 1101, account_cookie,
-              order['code'], 5, -1, 100, 'x', 2, 'qagateway', ContextInfo)
 
 
-def passorderwithModel(ContextInfo, order):
-    passorder(order['order_model'], 1101, account_cookie, order['code'],
-              5, -1, order['volume'], 'mymodel', 2, 'qagateway', ContextInfo)
+def passorderwithModel(ct, order):
+    passorder(order['order_model'], 1101, qmt_cookie, order['code'], 5, -1, order['volume'], 'mymodel', 2, 'qagateway', ct)
 
 
-def sell_normal(ContextInfo, order):
-    passorder(34, 1101, account_cookie,
-              order['code'], 6, -1, order['volume'], 'x', 2, 'qagateway', ContextInfo)
+def sell_normal(ct, order):
+    passorder(34, 1101, qmt_cookie, order['code'], 6, -1, order['volume'], 'x', 2, 'qagateway', ct)
 
 
-def sell_rq(ContextInfo, order):
-    passorder(28, 1101, account_cookie,
-              order['code'], 5, -1, order['volume'], 'x', 2, 'qagateway', ContextInfo)
 
 
-def buy_rz(ContextInfo, order):
+def buy_rz(ct, order):
     """
     passorder(opType, orderType, accountID, orderCode, prType, volume
     opType
@@ -191,12 +153,41 @@ def buy_rz(ContextInfo, order):
     可为 -1，0，2，100 等任意数字；
     volume
     """
-    passorder(27, 1101, account_cookie,
-              order['code'], 4, -1,  order['volume'], 'x', 2, 'qagateway', ContextInfo)
+    passorder(27, 1101, qmt_cookie, order['code'], 4, -1,  order['volume'], 'x', 2, 'qagateway', ct)
 
+def one_order(ct, order):
+    buy_sell= 24 #sell
+    if order['direction'] == 'BUY':
+        buy_sell=23
 
-def handlebar(ContextInfo):
-    pos = get_trade_detail_data(account_cookie, 'credit', 'position')
+    price_type = -1 #-1,无效， 5，最新价，11， 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
+    quick_trade = 2
+    print(buy_sell, order['code'], order['price'])
+    passorder(buy_sell, 1101, qmt_cookie, order['code'], price_type, order['price'], 
+                 order['volume'], order['strategy_id'], quick_trade, 'aare', ct)
+
+       
+def handlebar(ct):
+
+    order_str = rdj_queue_pop(QMT_ORDER)
+    if order_str:
+        order = json.loads(order_str)
+        print(order)
+        one_order(ct, order)
+
+    for x in range(orderq.qsize()):
+        try:            
+            r = orderq.get_nowait()
+            if r['topic'] == 'insert_order':
+                one_order(ct, r)
+        
+        except Exception as r:
+            traceback.print_exc()
+
+    
+
+def handlebar_qa(ct):
+    pos = get_trade_detail_data(qmt_cookie, 'credit', 'position')
     for positonInfo in pos:
         # print(positonInfo.m_strInstrumentID)
         # if positonInfo.m_strInstrumentID
@@ -210,40 +201,40 @@ def handlebar(ContextInfo):
             if r['topic'] == 'insert_order':
                 # "price": 12.81, "order_direction": "SELL", "order_offset": "OPEN",
                 if r.get('order_model', "AUTO") != "AUTO":
-                    passorderwithModel(ContextInfo, r)
+                    passorderwithModel(ct, r)
                 else:
 
                     if r['order_direction'] == "BUY" and holding.get(r['code'], 0) >= r['volume']:
                         if r['code'] in ['600777', '603056', '603256', '603486', '000564', '000785', '002936', '002946']:
 
-                            buy_normal(ContextInfo, r)
+                            buy_normal(ct, r)
                         else:
-                            buy_rz(ContextInfo, r)
+                            buy_rz(ct, r)
                         """
 						if r['order_offset'] == "OPEN":
-							buy_rz(ContextInfo,r)
+							buy_rz(ct,r)
 						elif r['order_offset'] == "CLOSE":
-							holding = ContextInfo.holding.get(r['code'],None)
+							holding = ct.holding.get(r['code'],None)
 							if holding:
 								if holding.m_nCanUseVolume
-							buy_close_hq(ContextInfo,r)
+							buy_close_hq(ct,r)
 						"""
                     else:
                         # print(holding)
                         if available_holding.get(r['code'], 0) >= r['volume']:
-                            sell_normal(ContextInfo, r)
+                            sell_normal(ct, r)
 
                         """
 						if r['order_offset'] == "OPEN":
-							sell_rq(ContextInfo,r)
+							sell_rq(ct,r)
 						elif r['order_offset'] == "CLOSE":
-							sell_close_hk(ContextInfo,r)
+							sell_close_hk(ct,r)
 						"""
         except:
             pass
 
-    orders = get_trade_detail_data(account_cookie, 'credit', 'order')
-    #can_cancel = [order for order in orders if can_cancel_order(order.m_strOrderSysID, account_cookie, 'credit')]
+    orders = get_trade_detail_data(qmt_cookie, 'credit', 'order')
+    #can_cancel = [order for order in orders if can_cancel_order(order.m_strOrderSysID, qmt_cookie, 'credit')]
     can_cancel = [        order for order in orders if order.m_nOrderStatus in [48, 49, 50, 55]]
     now = datetime.datetime.now()
     if is_trade_time(now):
@@ -266,18 +257,18 @@ def handlebar(ContextInfo):
                         elif order.m_strOptName == '融券卖出':
                             order_model = 28
 
-                        if cancel(order.m_strOrderSysID, account_cookie, 'credit', ContextInfo):
+                        if cancel(order.m_strOrderSysID, qmt_cookie, 'credit', ct):
                             # m_nVolumeTotal  m_strOptName
                             if order_model in [27, 33]:
                                 print(
                                     'pass buy order', order.m_strInstrumentID, order.m_nVolumeTotal)
-                                passorder(order_model, 1101, account_cookie, order.m_strInstrumentID,
-                                          4, -1, order.m_nVolumeTotal, 'x', 1, 'qagateway', ContextInfo)
+                                passorder(order_model, 1101, qmt_cookie, order.m_strInstrumentID,
+                                          4, -1, order.m_nVolumeTotal, 'x', 1, 'qagateway', ct)
                             else:
                                 print(
                                     'pass sell order', order.m_strInstrumentID, order.m_nVolumeTotal)
-                                passorder(order_model, 1101, account_cookie, order.m_strInstrumentID,
-                                          6, -1, order.m_nVolumeTotal, 'x', 1, 'qagateway', ContextInfo)
+                                passorder(order_model, 1101, qmt_cookie, order.m_strInstrumentID,
+                                          6, -1, order.m_nVolumeTotal, 'x', 1, 'qagateway', ct)
                 except Exception as r:
                     traceback.print_exc()
 
@@ -295,22 +286,20 @@ def is_trade_time(_time):
         return False
 
 
-def qaorderrouter(ContextInfo, a, b, data):
+def qaorderrouter(ct, a, b, data):
     try:
         r = json.loads(data)
-        print(f'get order ： {r}')
         orderq.put_nowait(r)
 
     except:
         print('qaorderrouter error!')
         pass
 
-# 资金账号主推函数
-
-
-def unpack_data(h):
+def unpack_data(h,not_use=None):
     key = [r for r in dir(h) if r[0] != '_']
-    key=list(set(key)-set(['m_dStockLastPrice','m_dStaticHoldMargin']))
+    if not_use:
+        #key=list(set(key)-set(['m_dStockLastPrice','m_dStaticHoldMargin']))
+        key=list(set(key)-set(not_use))
     value = []
     keys = []
     for i in key:
@@ -322,38 +311,38 @@ def unpack_data(h):
                 pass
 
     px = dict(zip(keys, value))
-    px['account_cookie'] = account_cookie
+    px['account_cookie'] = qmt_cookie
     return px
 
 
-def pub_msg(ContextInfo, h, topics):
+def pub_msg(ct, h, topics):
     px = unpack_data(h)
-    pro.pub(json.dumps({'topic': topics, 'data': px}),
-            routing_key=account_cookie)
+    pro.pub(json.dumps({'topic': topics, 'data': px}), routing_key=qmt_cookie)
 
 
-def account_callback(ContextInfo, accountInfo):
+def account_callback(ct, accountInfo):
     print('accountInfo')
     # 输出资金账号状态
 
     # print(accountInfo.m_strStatus)
-    pub_msg(ContextInfo, accountInfo, 'account')
-
-    available = []
-    obj_list = get_enable_short_contract(account_cookie)
-
-    for i in obj_list:
-        pdata = unpack_data(i)
-        available.append(pdata)
-
-    if len(available) > 0:
-        database.available.drop()
-        database.available.insert_many(available)
-    
     output_acc(qmt_cookie)
+    pub_msg(ct, accountInfo, 'account')
+
+    # available = []
+    # obj_list = get_enable_short_contract(qmt_cookie)
+
+    # for i in obj_list:
+    #     pdata = unpack_data(i)
+    #     available.append(pdata)
+
+    # if len(available) > 0:
+    #     database.available.drop()
+    #     database.available.insert_many(available)
+    
 
 
-    #positions = get_trade_detail_data(account_cookie, 'stock', 'position')
+
+    #positions = get_trade_detail_data(qmt_cookie, 'stock', 'position')
     #for dt in positions:
     #    print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
     #    f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
@@ -363,37 +352,42 @@ def account_callback(ContextInfo, accountInfo):
 # 委托主推函数
 
 
-def order_callback(ContextInfo, orderInfo):
+def order_callback(ct, orderInfo):
     print('orderInfo')
     # 输出委托证券代码
     print(orderInfo.m_strInstrumentID)
-    pub_msg(ContextInfo, orderInfo, 'order')
+    data=unpack_data(orderInfo)
+    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderInfo", "data":data}, cls=Py36JsonEncoder))
+    pub_msg(ct, orderInfo, 'order')
 # 成交主推函数
 
 
-def deal_callback(ContextInfo, dealInfo):
+def deal_callback(ct, dealInfo):
     print('dealInfo')
-    # 输出成交证券代码
+    # 输出成交证券代码Info
     print(dealInfo.m_strInstrumentID)
-    pub_msg(ContextInfo, dealInfo, 'trade')
+    data=unpack_data(dealInfo)
+    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"dealInfo", "data":data}, cls=Py36JsonEncoder))
+    pub_msg(ct, dealInfo, 'trade')
+    
 # 持仓主推函数
 
 
-def position_callback(ContextInfo, positonInfo):
+def position_callback(ct, positonInfo):
     print('positonInfo')
     # 输出持仓证券代码
     #print(dir(positonInfo))
-    pub_msg(ContextInfo, positonInfo, 'position')
+    pub_msg(ct, positonInfo, 'position')
     output_pos(qmt_cookie)
     
-
-
 # 下单出错回调函数
 
 
-def orderError_callback(ContextInfo, passOrderInfo, msg):
+def orderError_callback(ct, passOrderInfo, msg):
     print('orderError_callback')
     # 输出下单信息以及错误信息
     print(passOrderInfo.orderCode)
     print(msg)
-    pub_msg(ContextInfo, passOrderInfo, 'error_order')
+    data=unpack_data(passOrderInfo)
+    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"passOrderInfo", "data":data,"msg":msg}, cls=Py36JsonEncoder))
+    pub_msg(ct, passOrderInfo, 'error_order')
