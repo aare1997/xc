@@ -57,6 +57,8 @@ def acc_timer_run(ct):
         one_order(ct, order)
     #output_acc(qmt_cookie)
     #output_pos(qmt_cookie)
+    output_cancel(ct)
+
     
 
 def output_acc(cookie):
@@ -74,6 +76,16 @@ def output_pos(cookie):
     if pos_list:
         rdj_set(QMT_POSITIONS, json.dumps(pos_list,cls=Py36JsonEncoder))
 
+def output_cancel(ct):
+    orders = get_cancel(ct)
+    cancel_list=[]
+    for item in orders:
+        px = unpack_data(item)
+        cancel_list.append(px)
+
+    if cancel_list:
+        rdj_queue_push(QMT_ORDERCB, json.dumps(cancel_list, cls=Py36JsonEncoder))
+
 
 def ipo_info(ct):
     ipo=get_ipo_data("STOCK")# 返回新股信息
@@ -82,16 +94,8 @@ def ipo_info(ct):
         limit=get_new_purchase_limit()
 
 
-
-
 def passorderwithModel(ct, order):
     passorder(order['order_model'], 1101, qmt_cookie, order['code'], 5, -1, order['volume'], 'mymodel', 2, 'qagateway', ct)
-
-
-def sell_normal(ct, order):
-    passorder(34, 1101, qmt_cookie, order['code'], 6, -1, order['volume'], 'x', 2, 'qagateway', ct)
-
-
 
 
 def buy_rz(ct, order):
@@ -166,14 +170,33 @@ def one_order(ct, order):
     passorder(buy_sell, 1101, qmt_cookie, order['code'], price_type, order['price'], 
                  order['volume'], order['strategy_id'], quick_trade, 'aare', ct)
 
-       
+def get_cancel(ct):
+    orders = get_trade_detail_data(qmt_cookie, 'stock', 'order')
+    can_cancel = [ order for order in orders if order.m_nOrderStatus in [48, 49, 50, 55]]
+    return can_cancel
+
+def cancel_some(ct, order=None):
+
+    if order:
+        cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
+        return
+    can_cancel= get_cancel(ct)
+    print(can_cancel)
+    if can_cacel:
+        cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
+
+
+
 def handlebar(ct):
 
     order_str = rdj_queue_pop(QMT_ORDER)
     if order_str:
         order = json.loads(order_str)
         print(order)
-        one_order(ct, order)
+        if order['topic'] in ['inser_order', 'manual_order']:
+            one_order(ct, order)
+        elif order['topic'] == 'cancel_order':
+            cancel_some(ct)
 
     for x in range(orderq.qsize()):
         try:            
