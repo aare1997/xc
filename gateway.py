@@ -347,7 +347,7 @@ def pub_msg(ct, h, topics):
 
 
 def account_callback(ct, accountInfo):
-    print('accountInfo')
+    #print('accountInfo')
     # 输出资金账号状态
 
     # print(accountInfo.m_strStatus)
@@ -374,10 +374,6 @@ def account_callback(ct, accountInfo):
     #    f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 
 
-
-# 委托主推函数
-
-
 def order_callback(ct, orderInfo):
     print('orderInfo')
     # 输出委托证券代码
@@ -385,7 +381,6 @@ def order_callback(ct, orderInfo):
     data=unpack_data(orderInfo)
     rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderInfo", "data":data}, cls=Py36JsonEncoder))
     pub_msg(ct, orderInfo, 'order')
-# 成交主推函数
 
 
 def deal_callback(ct, dealInfo):
@@ -396,8 +391,6 @@ def deal_callback(ct, dealInfo):
     rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"dealInfo", "data":data}, cls=Py36JsonEncoder))
     pub_msg(ct, dealInfo, 'trade')
     
-# 持仓主推函数
-
 
 def position_callback(ct, positonInfo):
     print('positonInfo')
@@ -406,8 +399,6 @@ def position_callback(ct, positonInfo):
     pub_msg(ct, positonInfo, 'position')
     output_pos(qmt_cookie)
     
-# 下单出错回调函数
-
 
 def orderError_callback(ct, passOrderInfo, msg):
     print('orderError_callback')
