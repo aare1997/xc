@@ -339,7 +339,6 @@ def code_list_to_qmt(codex):
     return [code_append_market(x) for x in codex]
 
 
-
 g_redis_conn = None
 
 
@@ -388,6 +387,7 @@ def rdj_get(key, default=[]):
         return jl_ret
     return json.loads(ret)
 
+
 def rdj_queue_push(key, data):
     conn = rd_connect()
     if isinstance(data, str):
@@ -400,6 +400,8 @@ def rdj_queue_pop(key):
     conn = rd_connect()
     data = conn.rpop(key)
     return data
+
+
 def has_qmt_evnt(key='sub_tick'):
     file_name = TO_QMT_EVENT_PATH + key
     event_path = Path(TO_QMT_EVENT_PATH)

@@ -87,8 +87,7 @@ def init(ct):
 
     param.ct = ct
 
-
-
+QMT_SUB_EVENT = 'toqmt_sub_event'
 
 def qmt_timer_run(ct):
     if param.open_time_run and dt.now() > trade_start:
@@ -101,9 +100,11 @@ def qmt_timer_run(ct):
         if dt.now() > trade_open_stop:
             param.open_time_run = False
             
-    event = has_qmt_evnt()
-
-    if event:
+    #event = has_qmt_evnt()
+    event_str = rdj_queue_pop(QMT_SUB_EVENT)
+    if event_str:
+        event = json.loads(event_str)
+    #if event:
         try:
             if event['control'] == 'get_tick':
                 if param.tick_sub_list:
