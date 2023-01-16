@@ -24,7 +24,7 @@ QMT_ACC = XC_PREFIX + qmt_cookie
 QMT_POSITIONS = XC_PREFIX + qmt_cookie + '_positions'
 QMT_ORDERCB = XC_PREFIX + qmt_cookie + '_ordercb'
 QMT_ORDER = XC_PREFIX + qmt_cookie + '_order'
-
+QMT_IPO = XC_PREFIX + qmt_cookie + '_ipo'
 
 
 database = pymongo.MongoClient(mongo_ip).QMTREALTIME
@@ -54,10 +54,10 @@ def acc_timer_run(ct):
     if order_str:
         order = json.loads(order_str)
         print(order)
-        one_order(ct, order)
-    #output_acc(qmt_cookie)
-    #output_pos(qmt_cookie)
-    output_cancel(ct)
+        dispatch_order(ct, order)
+    output_acc(qmt_cookie)
+    output_pos(qmt_cookie)
+    #output_cancel(ct)
 
     
 
@@ -80,19 +80,19 @@ def output_cancel(ct):
     orders = get_cancel(ct)
     cancel_list=[]
     for item in orders:
-        px = unpack_data(item)
+        px = unpack_data(item,not_use=['m_dShortOccupedMargin'])
         cancel_list.append(px)
 
     if cancel_list:
-        rdj_queue_push(QMT_ORDERCB, json.dumps(cancel_list, cls=Py36JsonEncoder))
+        rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"cancel_list", "data":cancel_list}, cls=Py36JsonEncoder))
 
 
 def ipo_info(ct):
     ipo=get_ipo_data("STOCK")# 返回新股信息
-    for x in ipo:
-        print(x)
-        limit=get_new_purchase_limit()
-
+    if ipo:
+        limit=get_new_purchase_limit(qmt_cookie)
+        ipo['limit'] = limit
+        rdj_set(QMT_IPO,json.dumps(ipo, cls=Py36JsonEncoder))
 
 def passorderwithModel(ct, order):
     passorder(order['order_model'], 1101, qmt_cookie, order['code'], 5, -1, order['volume'], 'mymodel', 2, 'qagateway', ct)
@@ -163,11 +163,11 @@ def one_order(ct, order):
     buy_sell= 24 #sell
     if order['direction'] == 'BUY':
         buy_sell=23
-
-    price_type = -1 #-1,无效， 5，最新价，11， 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
+    code=order['code']+'.SH'
+    price_type = 11 #-1,无效， 5，最新价，11， 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
     quick_trade = 2
-    print(buy_sell, order['code'], order['price'])
-    passorder(buy_sell, 1101, qmt_cookie, order['code'], price_type, order['price'], 
+    print(buy_sell, order['code'], order['price'], order['volume'], order['strategy_id'],quick_trade)
+    passorder(buy_sell, 1101, qmt_cookie, code, price_type, order['price'], 
                  order['volume'], order['strategy_id'], quick_trade, 'aare', ct)
 
 def get_cancel(ct):
@@ -176,27 +176,30 @@ def get_cancel(ct):
     return can_cancel
 
 def cancel_some(ct, order=None):
-
     if order:
         cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
         return
     can_cancel= get_cancel(ct)
-    print(can_cancel)
-    if can_cacel:
+    print(f'cancel list: {can_cancel}', type(can_cancel), len(can_cancel))
+    if can_cancel:
+        print(f'cancel id : {can_cancel[0].m_strOrderSysID}')
         cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
 
-
+def dispatch_order(ct, order):
+    if order['topic'] in ['insert_order', 'manual_order']:
+        one_order(ct, order)
+    elif order['topic'] == 'cancel_order':
+        cancel_some(ct)
+    elif order['topic'] == 'cancel_list':
+        output_cancel(ct)
 
 def handlebar(ct):
-
     order_str = rdj_queue_pop(QMT_ORDER)
     if order_str:
         order = json.loads(order_str)
         print(order)
-        if order['topic'] in ['inser_order', 'manual_order']:
-            one_order(ct, order)
-        elif order['topic'] == 'cancel_order':
-            cancel_some(ct)
+        dispatch_order(ct, order)
+       
 
     for x in range(orderq.qsize()):
         try:            
@@ -412,5 +415,5 @@ def orderError_callback(ct, passOrderInfo, msg):
     print(passOrderInfo.orderCode)
     print(msg)
     data=unpack_data(passOrderInfo)
-    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"passOrderInfo", "data":data,"msg":msg}, cls=Py36JsonEncoder))
+    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderError", "data":data,"msg":msg}, cls=Py36JsonEncoder))
     pub_msg(ct, passOrderInfo, 'error_order')
