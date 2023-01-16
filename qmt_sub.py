@@ -105,7 +105,7 @@ def qmt_timer_run(ct):
 
     if event:
         try:
-            if event['control'] == 'get_tick':
+            if event['topic'] == 'get_tick':
                 if param.tick_sub_list:
                     param.tick_sub_list.extend(event['code'])
                 else:
@@ -119,7 +119,7 @@ def qmt_timer_run(ct):
                 
         
                 tick_get_ex_ori()
-            elif event['control'] == 'get_min':
+            elif event['topic'] == 'get_min':
                 df = get_min_nday(event['code'], '20220930')
                 print(df)
                 df = df.reset_index()
