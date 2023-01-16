@@ -101,10 +101,9 @@ def qmt_timer_run(ct):
             param.open_time_run = False
             
     #event = has_qmt_evnt()
-    event_str = rdj_queue_pop(QMT_SUB_EVENT)
-    if event_str:
-        event = json.loads(event_str)
-    #if event:
+    event = rdj_queue_pop(QMT_SUB_EVENT)
+
+    if event:
         try:
             if event['control'] == 'get_tick':
                 if param.tick_sub_list:

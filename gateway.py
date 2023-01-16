@@ -49,10 +49,9 @@ def init(ct):
 def acc_timer_run(ct):
     print('timer run')
     ipo_info(ct)
-    order_str = rdj_queue_pop(QMT_ORDER)
+    order = rdj_queue_pop(QMT_ORDER)
 
-    if order_str:
-        order = json.loads(order_str)
+    if order:
         print(order)
         dispatch_order(ct, order)
     output_acc(qmt_cookie)
@@ -194,9 +193,8 @@ def dispatch_order(ct, order):
         output_cancel(ct)
 
 def handlebar(ct):
-    order_str = rdj_queue_pop(QMT_ORDER)
-    if order_str:
-        order = json.loads(order_str)
+    order = rdj_queue_pop(QMT_ORDER)
+    if order:
         print(order)
         dispatch_order(ct, order)
        

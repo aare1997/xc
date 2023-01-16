@@ -399,6 +399,8 @@ def rdj_queue_push(key, data):
 def rdj_queue_pop(key):
     conn = rd_connect()
     data = conn.rpop(key)
+    if data:
+        data = json.loads(data)
     return data
 
 
