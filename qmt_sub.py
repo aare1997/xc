@@ -220,7 +220,7 @@ def tick_get_ex_ori():
     
     for k in df.keys():
         del df[k]['pvolume'],df[k]['lastSettlementPrice'],df[k]['settlementPrice'],df[k]['transactionNum'],df[k]['openInt']
-        del df[k]['stime'],df[k]['low'],df[k]['stockStatus']
+        del df[k]['stime'],df[k]['stockStatus']
         amx_tick_pub.pub(
             json.dumps({'topic': "tick", "code": k[:6], "format": "data_ex_ori", 'data': df[k]}, cls=Py36JsonEncoder),
             routing_key='tick',
