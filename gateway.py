@@ -47,7 +47,6 @@ def init(ct):
 
 
 def acc_timer_run(ct):
-    print('timer run')
     ipo_info(ct)
     order = rdj_queue_pop(QMT_ORDER)
 
@@ -162,7 +161,7 @@ def one_order(ct, order):
     buy_sell= 24 #sell
     if order['direction'] == 'BUY':
         buy_sell=23
-    code=order['code']+'.SH'
+    code=order['code']
     price_type = 11 #-1,无效， 5，最新价，11， 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
     quick_trade = 2
     print(buy_sell, order['code'], order['price'], order['volume'], order['strategy_id'],quick_trade)
@@ -391,7 +390,7 @@ def deal_callback(ct, dealInfo):
     
 
 def position_callback(ct, positonInfo):
-    print('positonInfo')
+    #print('positonInfo')
     # 输出持仓证券代码
     #print(dir(positonInfo))
     pub_msg(ct, positonInfo, 'position')
