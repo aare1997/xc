@@ -27,6 +27,17 @@ QMT_ORDER = XC_PREFIX + qmt_cookie + '_order'
 QMT_IPO = XC_PREFIX + qmt_cookie + '_ipo'
 
 
+class SUB:
+    pass
+
+
+log_info = SUB()
+log_info.positioncb_count = 0
+log_info.accountcb_count = 0
+log_info.ordercb_count = 0
+log_info.dealcb_count = 0
+
+
 database = pymongo.MongoClient(mongo_ip).QMTREALTIME
 pro = publisher_topic(exchange='QAQMTGateway', routing_key=qmt_cookie, host=eventmq_ip)
 holding = {}
@@ -348,8 +359,12 @@ def account_callback(ct, accountInfo):
     # 输出资金账号状态
 
     # print(accountInfo.m_strStatus)
+    log_info.accountcb_count +=1
+
     output_acc(qmt_cookie)
     pub_msg(ct, accountInfo, 'account')
+    if log_info.accountcb_count %10 == 0:
+        print(f'Gateway : acccb {log_info.accountcb_count} ,  poscb {log_info.positioncb_count} ')
 
     # available = []
     # obj_list = get_enable_short_contract(qmt_cookie)
@@ -378,6 +393,7 @@ def order_callback(ct, orderInfo):
     data=unpack_data(orderInfo)
     rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderInfo", "data":data}, cls=Py36JsonEncoder))
     pub_msg(ct, orderInfo, 'order')
+    log_info.ordercb_count +=1
 
 
 def deal_callback(ct, dealInfo):
@@ -387,6 +403,7 @@ def deal_callback(ct, dealInfo):
     data=unpack_data(dealInfo)
     rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"dealInfo", "data":data}, cls=Py36JsonEncoder))
     pub_msg(ct, dealInfo, 'trade')
+    log_info.dealcb_count +=1
     
 
 def position_callback(ct, positonInfo):
@@ -395,6 +412,9 @@ def position_callback(ct, positonInfo):
     #print(dir(positonInfo))
     pub_msg(ct, positonInfo, 'position')
     output_pos(qmt_cookie)
+    log_info.positioncb_count +=1
+    if log_info.positioncb_count % 10 == 0:
+        print(f'Gateway : poscb {log_info.positioncb_count}, acccb {log_info.accountcb_count}')
     
 
 def orderError_callback(ct, passOrderInfo, msg):
