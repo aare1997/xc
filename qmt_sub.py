@@ -45,7 +45,7 @@ trade_mid_start = dt.strptime(time_now.strftime("%Y-%m-%d 13:00:00"), "%Y-%m-%d 
 trade_end = dt.strptime(time_now.strftime("%Y-%m-%d 15:01:00"), "%Y-%m-%d %H:%M:%S")
 
 snapshot_open_pub = publisher_topic(exchange='qmt_stock_snapshot_open', routing_key='', host=eventmq_ip)
-amx_tick_pub = publisher_topic(exchange='qmt_stock_amx_tick', routing_key='', host=eventmq_ip)
+amx_ticks_pub = publisher_topic(exchange='qmt_stock_amx_ticks', routing_key='', host=eventmq_ip)
 
 
 def stock_trading_time():
@@ -125,7 +125,7 @@ def qmt_timer_run(ct):
                 df = df.reset_index()
                 if not df.empty:
                     print(f'will pub min:{event["code"]}')
-                    amx_tick_pub.pub(
+                    amx_ticks_pub.pub(
                         json.dumps({'topic': "tick", 'data': df.to_json(orient='records')}, cls=Py36JsonEncoder),
                         routing_key='min',
                     )
@@ -166,11 +166,11 @@ def tick_sub_list_run_old():
     df = param.ct.get_market_data_dict(['quoter'], stock_code=code, start_time=param.tick_sub_day, period='tick')
 
     if not df.empty:
-        amx_tick_pub.pub(
+        amx_ticks_pub.pub(
             json.dumps(
                 {'topic': "tick", "code": code[:6], "format": "data_df", 'data': df.to_json()}, cls=Py36JsonEncoder
             ),
-            routing_key='tick',
+            routing_key='ticks',
         )
 
     else:
@@ -185,9 +185,9 @@ def tick_get_ori():
     xx = param.ct.get_market_data_ori(['quoter'], stock_code=code, start_time=param.tick_sub_day, period='tick')
 
     for k in xx.keys():
-        amx_tick_pub.pub(
+        amx_ticks_pub.pub(
             json.dumps({'topic': "tick", "code": k[:6], "format": "data_ori", 'data': xx[k]}, cls=Py36JsonEncoder),
-            routing_key='tick',
+            routing_key='ticks',
         )
 
     gc.collect()
@@ -200,11 +200,11 @@ def tick_get_ex():
     code = param.tick_sub_list[:max_idx]
     df = param.ct.get_market_data_ex(fields=[], stock_code=code, period='tick', start_time=param.tick_sub_day, subscribe=True)
     for k in df.keys():
-        amx_tick_pub.pub(
+        amx_ticks_pub.pub(
             json.dumps(
                 {'topic': "tick", "code": k[:6], "format": "data_ex", 'data': df[k].to_json()}, cls=Py36JsonEncoder
             ),
-            routing_key='tick',
+            routing_key='ticks',
         )
 
     del param.tick_sub_list[:max_idx]
@@ -221,9 +221,9 @@ def tick_get_ex_ori():
     for k in df.keys():
         del df[k]['pvolume'],df[k]['lastSettlementPrice'],df[k]['settlementPrice'],df[k]['transactionNum'],df[k]['openInt']
         del df[k]['stime'],df[k]['stockStatus']
-        amx_tick_pub.pub(
+        amx_ticks_pub.pub(
             json.dumps({'topic': "tick", "code": k[:6], "format": "data_ex_ori", 'data': df[k]}, cls=Py36JsonEncoder),
-            routing_key='tick',
+            routing_key='ticks',
         )
 
     del param.tick_sub_list[:max_idx]
