@@ -129,6 +129,12 @@ def qmt_timer_run(ct):
                         json.dumps({'topic': "tick", 'data': df.to_json(orient='records')}, cls=Py36JsonEncoder),
                         routing_key='min',
                     )
+            elif event['topic'] == 'get_last_ticks':
+                code = event['code']
+                full_tick = ct.get_full_tick(event['code'])
+                print(full_tick)
+                rdj_queue_push('qmt_last_ticks_cb',json.dumps({'topic': 'last_ticks', 'data': full_tick}, cls=Py36JsonEncoder))
+                
             else:
                 print(f'no support: {event}')
         except Exception as e:
