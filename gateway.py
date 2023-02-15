@@ -62,7 +62,7 @@ def acc_timer_run(ct):
     order = rdj_queue_pop(QMT_ORDER)
 
     if order:
-        print(order)
+        print(f'in timer :{order}')
         dispatch_order(ct, order)
     output_acc(qmt_cookie)
     output_pos(qmt_cookie)
@@ -186,26 +186,36 @@ def get_cancel(ct):
 
 def cancel_some(ct, order=None):
     if order:
-        cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
-        return
-    can_cancel= get_cancel(ct)
-    print(f'cancel list: {can_cancel}', type(can_cancel), len(can_cancel))
-    if can_cancel:
-        print(f'cancel id : {can_cancel[0].m_strOrderSysID}')
-        cancel(can_cancel[0].m_strOrderSysID, qmt_cookie, 'stock', ct)
+        if order['order_id'] != 0:
+            cancel(order['order_id'], qmt_cookie, 'stock', ct)
+            return
+        if order['cancel_all'] == True:
+            can_cancel= get_cancel(ct)
+            if can_cancel:
+                for x in can_cancel:
+                    
+                    print(f'in cancel all id : {x.m_strOrderSysID}')
+                    cancel(x.m_strOrderSysID, qmt_cookie, 'stock', ct)
+            return
+
+        if len(order['code']) == 6:
+            print(f'cancel by code {order["code"]} no imp now!')
 
 def dispatch_order(ct, order):
+    if isinstance(order, str):
+        print(f'order is str？ : {order} ')
+        return
     if order['topic'] in ['insert_order', 'manual_order']:
         one_order(ct, order)
     elif order['topic'] == 'cancel_order':
-        cancel_some(ct)
+        cancel_some(ct, order)
     elif order['topic'] == 'cancel_list':
         output_cancel(ct)
 
 def handlebar(ct):
     order = rdj_queue_pop(QMT_ORDER)
     if order:
-        print(order)
+        print(f'in handlebar : {order}')
         dispatch_order(ct, order)
        
 
@@ -365,26 +375,6 @@ def account_callback(ct, accountInfo):
     pub_msg(ct, accountInfo, 'account')
     if log_info.accountcb_count %10 == 0:
         print(f'Gateway : acccb {log_info.accountcb_count} ,  poscb {log_info.positioncb_count} ')
-
-    # available = []
-    # obj_list = get_enable_short_contract(qmt_cookie)
-
-    # for i in obj_list:
-    #     pdata = unpack_data(i)
-    #     available.append(pdata)
-
-    # if len(available) > 0:
-    #     database.available.drop()
-    #     database.available.insert_many(available)
-    
-
-
-
-    #positions = get_trade_detail_data(qmt_cookie, 'stock', 'position')
-    #for dt in positions:
-    #    print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
-    #    f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
-
 
 def order_callback(ct, orderInfo):
     print('orderInfo')

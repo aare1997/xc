@@ -25,7 +25,7 @@ QMT_POSITIONS = XC_PREFIX + qmt_cookie + '_positions'
 QMT_ORDERCB = XC_PREFIX + qmt_cookie + '_ordercb'
 QMT_ORDER = XC_PREFIX + qmt_cookie + '_order'
 QMT_IPO = XC_PREFIX + qmt_cookie + '_ipo'
-
+QMT_LOG = XC_PREFIX + qmt_cookie + '_log'
 
 class SUB:
     pass
@@ -60,6 +60,7 @@ def init(ct):
 def acc_timer_run(ct):
     ipo_info(ct)
     order = rdj_queue_pop(QMT_ORDER)
+    
 
     if order:
         print(f'in timer :{order}')
@@ -103,70 +104,6 @@ def ipo_info(ct):
         ipo['limit'] = limit
         rdj_set(QMT_IPO,json.dumps(ipo, cls=Py36JsonEncoder))
 
-def passorderwithModel(ct, order):
-    passorder(order['order_model'], 1101, qmt_cookie, order['code'], 5, -1, order['volume'], 'mymodel', 2, 'qagateway', ct)
-
-
-def buy_rz(ct, order):
-    """
-    passorder(opType, orderType, accountID, orderCode, prType, volume
-    opType
-            23：股票买入，或沪港通、深港通股票买入
-            24：股票卖出，或沪港通、深港通股票卖出
-
-            33：信用账号股票买入
-            34：信用账号股票卖出
-            70：专项融资买入
-            71：专项融券卖出
-            72：专项买券还券
-            73：专项直接还券
-            74：专项卖券还款
-            75：专项直接还款
-
-    orderType
-            1101：单股、单账号、普通、股/手方式下单
-            1102：单股、单账号、普通、金额（元）方式下单（只支持股票）
-            1113：单股、单账号、总资产、比例 [0 ~ 1] 方式下单
-            1123：单股、单账号、可用、比例[0 ~ 1]方式下单
-
-
-    prType
-            -1：无效（实际下单时,需要用交易面板交易函数那设定的选价类型）
-            0：卖5价
-            1：卖4价
-            2：卖3价
-            3：卖2价
-            4：卖1价
-            5：最新价
-            6：买1价
-            7：买2价（组合不支持）
-            8：买3价（组合不支持）
-            9：买4价（组合不支持）
-            10：买5价（组合不支持）
-            11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
-            12：涨跌停价
-            13：挂单价
-            14：对手价
-            26：限价即时全部成交否则撤单(仅对股票期权申报有效)
-            27：市价即成剩撤(仅对股票期权申报有效)
-            28：市价即全成否则撤(仅对股票期权申报有效)
-            29：市价剩转限价(仅对股票期权申报有效)
-            42：最优五档即时成交剩余撤销申报(仅对上交所申报有效)
-            43：最优五档即时成交剩转限价申报(仅对上交所申报有效)
-            44：对手方最优价格委托(仅对深交所申报有效)
-            45：本方最优价格委托(仅对深交所申报有效)
-            46：即时成交剩余撤销委托(仅对深交所申报有效)
-            47：最优五档即时成交剩余撤销委托(仅对深交所申报有效)
-            48：全额成交或撤销委托(仅对深交所申报有效)
-            49：盘后定价
-
-    price
-            一、单股下单时，prType 是模型价/科创板盘后定价时 price 有效；其它情况无效；即单股
-    时， prType 参数为 11，49 时被使用。 prType 参数不为 11，49 时也需填写，填写的内容
-    可为 -1，0，2，100 等任意数字；
-    volume
-    """
-    passorder(27, 1101, qmt_cookie, order['code'], 4, -1,  order['volume'], 'x', 2, 'qagateway', ct)
 
 def one_order(ct, order):
     buy_sell= 24 #sell
@@ -211,6 +148,9 @@ def dispatch_order(ct, order):
         cancel_some(ct, order)
     elif order['topic'] == 'cancel_list':
         output_cancel(ct)
+
+    msg = json.dumps(order)
+    rdj_queue_push(QMT_LOG, msg)
 
 def handlebar(ct):
     order = rdj_queue_pop(QMT_ORDER)
@@ -365,10 +305,6 @@ def pub_msg(ct, h, topics):
 
 
 def account_callback(ct, accountInfo):
-    #print('accountInfo')
-    # 输出资金账号状态
-
-    # print(accountInfo.m_strStatus)
     log_info.accountcb_count +=1
 
     output_acc(qmt_cookie)
@@ -377,29 +313,27 @@ def account_callback(ct, accountInfo):
         print(f'Gateway : acccb {log_info.accountcb_count} ,  poscb {log_info.positioncb_count} ')
 
 def order_callback(ct, orderInfo):
-    print('orderInfo')
-    # 输出委托证券代码
-    print(orderInfo.m_strInstrumentID)
+    print(f'orderInfo : {orderInfo.m_strInstrumentID}')
+
     data=unpack_data(orderInfo)
-    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderInfo", "data":data}, cls=Py36JsonEncoder))
+    msg=json.dumps({"topic":"orderInfo", "data":data}, cls=Py36JsonEncoder)
+    rdj_queue_push(QMT_ORDERCB, msg )
+    rdj_queue_push(QMT_LOG, msg)
     pub_msg(ct, orderInfo, 'order')
     log_info.ordercb_count +=1
 
 
 def deal_callback(ct, dealInfo):
-    print('dealInfo')
-    # 输出成交证券代码Info
-    print(dealInfo.m_strInstrumentID)
+    print(f'dealInfo : {dealInfo.m_strInstrumentID}')
     data=unpack_data(dealInfo)
-    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"dealInfo", "data":data}, cls=Py36JsonEncoder))
+    msg = json.dumps({"topic":"dealInfo", "data":data}, cls=Py36JsonEncoder)
+    rdj_queue_push(QMT_ORDERCB, msg)
+    rdj_queue_push(QMT_LOG, msg)
     pub_msg(ct, dealInfo, 'trade')
     log_info.dealcb_count +=1
     
 
 def position_callback(ct, positonInfo):
-    #print('positonInfo')
-    # 输出持仓证券代码
-    #print(dir(positonInfo))
     pub_msg(ct, positonInfo, 'position')
     output_pos(qmt_cookie)
     log_info.positioncb_count +=1
@@ -409,9 +343,9 @@ def position_callback(ct, positonInfo):
 
 def orderError_callback(ct, passOrderInfo, msg):
     print('orderError_callback')
-    # 输出下单信息以及错误信息
-    print(passOrderInfo.orderCode)
-    print(msg)
+    
     data=unpack_data(passOrderInfo)
-    rdj_queue_push(QMT_ORDERCB, json.dumps({"topic":"orderError", "data":data,"msg":msg}, cls=Py36JsonEncoder))
+    jmsg = json.dumps({"topic":"orderError", "data":data,"msg":msg}, cls=Py36JsonEncoder)
+    rdj_queue_push(QMT_ORDERCB, jmsg)
+    rdj_queue_push(QMT_LOG, jmsg)
     pub_msg(ct, passOrderInfo, 'error_order')
