@@ -71,8 +71,11 @@ def acc_timer_run(ct):
 
 def output_acc(cookie):
     accounts = get_trade_detail_data(cookie, 'stock', 'account')
-    px = unpack_data(accounts[0])
-    rdj_set(QMT_ACC, json.dumps(px, cls=Py36JsonEncoder))
+    if accounts:
+        px = unpack_data(accounts[0])
+        rdj_set(QMT_ACC, json.dumps(px, cls=Py36JsonEncoder))
+    else:
+        print('No account find!')
 
 
 def output_pos(cookie):
@@ -180,124 +183,7 @@ def handlebar(ct):
 
         except Exception as r:
             traceback.print_exc()
-
-
-def handlebar_qa(ct):
-    pos = get_trade_detail_data(qmt_cookie, 'credit', 'position')
-    for positonInfo in pos:
-        # print(positonInfo.m_strInstrumentID)
-        # if positonInfo.m_strInstrumentID
-        available_holding[positonInfo.m_strInstrumentID] = positonInfo.m_nCanUseVolume
-        holding[positonInfo.m_strInstrumentID] = positonInfo.m_nCanUseVolume
-
-    for x in range(orderq.qsize()):
-        try:
-            r = orderq.get_nowait()
-            print('hold', holding.get(r['code'], 0))
-            if r['topic'] == 'insert_order':
-                # "price": 12.81, "order_direction": "SELL", "order_offset": "OPEN",
-                if r.get('order_model', "AUTO") != "AUTO":
-                    passorderwithModel(ct, r)
-                else:
-
-                    if r['order_direction'] == "BUY" and holding.get(r['code'], 0) >= r['volume']:
-                        if r['code'] in [
-                            '600777',
-                            '603056',
-                            '603256',
-                            '603486',
-                            '000564',
-                            '000785',
-                            '002936',
-                            '002946',
-                        ]:
-
-                            buy_normal(ct, r)
-                        else:
-                            buy_rz(ct, r)
-                        """
-						if r['order_offset'] == "OPEN":
-							buy_rz(ct,r)
-						elif r['order_offset'] == "CLOSE":
-							holding = ct.holding.get(r['code'],None)
-							if holding:
-								if holding.m_nCanUseVolume
-							buy_close_hq(ct,r)
-						"""
-                    else:
-                        # print(holding)
-                        if available_holding.get(r['code'], 0) >= r['volume']:
-                            sell_normal(ct, r)
-
-                        """
-						if r['order_offset'] == "OPEN":
-							sell_rq(ct,r)
-						elif r['order_offset'] == "CLOSE":
-							sell_close_hk(ct,r)
-						"""
-        except:
-            pass
-
-    orders = get_trade_detail_data(qmt_cookie, 'credit', 'order')
-    # can_cancel = [order for order in orders if can_cancel_order(order.m_strOrderSysID, qmt_cookie, 'credit')]
-    can_cancel = [order for order in orders if order.m_nOrderStatus in [48, 49, 50, 55]]
-    now = datetime.datetime.now()
-    if is_trade_time(now):
-        print('check order can cancel: ', len(can_cancel))
-        for order in can_cancel:
-            # o_seconds = int(order.m_strInsertTime[-2:])
-            o_minute = int(order.m_strInsertTime[-4:-2])
-            # o_hour =  int(order.m_strInsertTime[:-4])
-            if now.minute - o_minute > 1:
-
-                try:
-                    if order.m_strOptName in ['担保品买入', '担保品卖出', '融资买入', '融券卖出']:
-                        order_model = 33
-                        if order.m_strOptName == '担保品买入':
-                            order_model = 33
-                        elif order.m_strOptName == '担保品卖出':
-                            order_model = 34
-                        elif order.m_strOptName == '融资买入':
-                            order_model = 27
-                        elif order.m_strOptName == '融券卖出':
-                            order_model = 28
-
-                        if cancel(order.m_strOrderSysID, qmt_cookie, 'credit', ct):
-                            # m_nVolumeTotal  m_strOptName
-                            if order_model in [27, 33]:
-                                print('pass buy order', order.m_strInstrumentID, order.m_nVolumeTotal)
-                                passorder(
-                                    order_model,
-                                    1101,
-                                    qmt_cookie,
-                                    order.m_strInstrumentID,
-                                    4,
-                                    -1,
-                                    order.m_nVolumeTotal,
-                                    'x',
-                                    1,
-                                    'qagateway',
-                                    ct,
-                                )
-                            else:
-                                print('pass sell order', order.m_strInstrumentID, order.m_nVolumeTotal)
-                                passorder(
-                                    order_model,
-                                    1101,
-                                    qmt_cookie,
-                                    order.m_strInstrumentID,
-                                    6,
-                                    -1,
-                                    order.m_nVolumeTotal,
-                                    'x',
-                                    1,
-                                    'qagateway',
-                                    ct,
-                                )
-                except Exception as r:
-                    traceback.print_exc()
-
-
+    
 def is_trade_time(_time):
     if _time.hour in [10, 13, 14]:
         return True
