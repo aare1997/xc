@@ -55,6 +55,8 @@ def init(ct):
 
     threading.Thread(target=sub.start, daemon=True).start()
     ct.run_time("acc_timer_run", "10nSecond", "2019-10-14 13:20:00")
+    ct.run_time("ipo_timer_run", "1nDay", "2023-01-01 14:35:00")
+    ct.run_time("repo_timer_run", "1nDay", "2023-02-01 15:08:00")
 
 
 def acc_timer_run(ct):
@@ -67,6 +69,39 @@ def acc_timer_run(ct):
     output_acc(qmt_cookie)
     output_pos(qmt_cookie)
     # output_cancel(ct)
+
+
+def repo_timer_run(ct):
+    repo_1d_sh = '204001.SH'
+    repo_1d_sz = '131810.SZ'
+
+    if datetime.datetime.now().weekday() != 3:
+        print(f'不是星期四，不做逆回购')
+        return
+
+    cash = get_trade_detail_data(qmt_cookie, 'stock', 'account')[0].m_dAvailable
+    vol = int(cash / 1000) * 10
+    print("可用余额：", cash, "   数量：", vol)
+
+    if vol >= 1000:
+        ret = ct.get_market_data(['quoter'], stock_code=[repo_1d_sh], start_time='', end_time='', period='tick')
+        buy5_price = ret['bidPrice'][-1]
+        passorder(24, 1101, qmt_cookie, repo_1d_sh, 11, buy5_price, vol, '', 2, '', ct)
+        print(f'buy {repo_1d_sz} {buy5_price}, vol {vol}')
+
+    elif vol > 10:
+        ret = ct.get_market_data(['quoter'], stock_code=[repo_1d_sz], start_time='', end_time='', period='tick')
+        buy5_price = ret['bidPrice'][-1]
+        passorder(24, 1101, qmt_cookie, repo_1d_sz, 11, buy5_price, vol, '', 2, '', ct)
+        print(f'buy {repo_1d_sz} {buy5_price}, vol {vol}')
+    else:
+        print('可用余额不足{cash}, 没有逆回购!')
+
+
+def ipo_timer_run(ct):
+    print(f'ipo timer run')
+
+    pass
 
 
 def output_acc(cookie):
@@ -101,7 +136,7 @@ def output_cancel(ct):
 
 
 def ipo_info(ct):
-    ipo = get_ipo_data("STOCK")  # 返回新股信息
+    ipo = get_ipo_data()  # "STOCK"新股信息, "BOND" 返回新债申购信息,"" ALL
     if ipo:
         limit = get_new_purchase_limit(qmt_cookie)
         ipo['limit'] = limit
@@ -183,7 +218,8 @@ def handlebar(ct):
 
         except Exception as r:
             traceback.print_exc()
-    
+
+
 def is_trade_time(_time):
     if _time.hour in [10, 13, 14]:
         return True
