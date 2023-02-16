@@ -100,7 +100,6 @@ def qmt_timer_run(ct):
         if dt.now() > trade_open_stop:
             param.open_time_run = False
 
-    # event = has_qmt_evnt()
     event = rdj_queue_pop(QMT_SUB_EVENT)
 
     if event:
@@ -129,12 +128,14 @@ def qmt_timer_run(ct):
                         routing_key='min',
                     )
             elif event['topic'] == 'get_last_ticks':
-                code = event['code']
+
                 full_tick = ct.get_full_tick(event['code'])
-                print(full_tick)
                 rdj_queue_push(
                     'qmt_last_ticks_cb', json.dumps({'topic': 'last_ticks', 'data': full_tick}, cls=Py36JsonEncoder)
                 )
+               
+                if not full_tick:
+                    print(f'last_ticks is null, {event["code"]}')
 
             else:
                 print(f'no support: {event}')
