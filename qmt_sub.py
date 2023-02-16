@@ -1,7 +1,5 @@
 #encoding:gbk
-'''
 
-'''
 import pandas as pd
 import numpy as np
 import json
@@ -22,11 +20,12 @@ from QAPUBSUB.producer import publisher, publisher_topic
 class SUB:
     pass
 
+
 param = SUB()
 param.tick_sub_list = []
 
-log_info=SUB()
-log_info.sub_code=0
+log_info = SUB()
+log_info.sub_code = 0
 log_info.sub_code_total = 0
 log_info.sub_event_count = 0
 
@@ -37,7 +36,7 @@ account_cookie = '230041917'
 
 time_now = dt.now()
 today_str = datetime.datetime.now().strftime("%Y%m%d")
-trade_day=datetime.datetime.now().date().strftime('%Y%m%d')
+trade_day = datetime.datetime.now().date().strftime('%Y%m%d')
 trade_start = dt.strptime(time_now.strftime("%Y-%m-%d 09:16:00"), "%Y-%m-%d %H:%M:%S")
 trade_open_stop = dt.strptime(time_now.strftime("%Y-%m-%d 09:25:25"), "%Y-%m-%d %H:%M:%S")
 trade_mid_stop = dt.strptime(time_now.strftime("%Y-%m-%d 11:30:05"), "%Y-%m-%d %H:%M:%S")
@@ -84,10 +83,11 @@ def init(ct):
         param.open_time_run = False
         ct.run_time("qmt_timer_run", "3nSecond", "2019-10-14 13:20:00")
 
-
     param.ct = ct
 
+
 QMT_SUB_EVENT = 'toqmt_sub_event'
+
 
 def qmt_timer_run(ct):
     if param.open_time_run and dt.now() > trade_start:
@@ -99,8 +99,8 @@ def qmt_timer_run(ct):
         print(f'open time pub: {len(full_tick)}')
         if dt.now() > trade_open_stop:
             param.open_time_run = False
-            
-    #event = has_qmt_evnt()
+
+    # event = has_qmt_evnt()
     event = rdj_queue_pop(QMT_SUB_EVENT)
 
     if event:
@@ -110,14 +110,13 @@ def qmt_timer_run(ct):
                     param.tick_sub_list.extend(event['code'])
                 else:
                     param.tick_sub_list = event['code']
-                param.tick_sub_day=trade_day
+                param.tick_sub_day = trade_day
                 if 'date' in event:
-                    param.tick_sub_day=event['date']
+                    param.tick_sub_day = event['date']
                 log_info.sub_code = len(param.tick_sub_list)
-                log_info.sub_event_count +=1
+                log_info.sub_event_count += 1
                 print(f'Sub code {log_info.sub_code}, sub count : {log_info.sub_event_count }')
-                
-        
+
                 tick_get_ex_ori()
             elif event['topic'] == 'get_min':
                 df = get_min_nday(event['code'], '20220930')
@@ -133,8 +132,10 @@ def qmt_timer_run(ct):
                 code = event['code']
                 full_tick = ct.get_full_tick(event['code'])
                 print(full_tick)
-                rdj_queue_push('qmt_last_ticks_cb',json.dumps({'topic': 'last_ticks', 'data': full_tick}, cls=Py36JsonEncoder))
-                
+                rdj_queue_push(
+                    'qmt_last_ticks_cb', json.dumps({'topic': 'last_ticks', 'data': full_tick}, cls=Py36JsonEncoder)
+                )
+
             else:
                 print(f'no support: {event}')
         except Exception as e:
@@ -204,7 +205,9 @@ def tick_get_ex():
     max_idx = min(10, len(param.tick_sub_list))
 
     code = param.tick_sub_list[:max_idx]
-    df = param.ct.get_market_data_ex(fields=[], stock_code=code, period='tick', start_time=param.tick_sub_day, subscribe=True)
+    df = param.ct.get_market_data_ex(
+        fields=[], stock_code=code, period='tick', start_time=param.tick_sub_day, subscribe=True
+    )
     for k in df.keys():
         amx_ticks_pub.pub(
             json.dumps(
@@ -223,10 +226,16 @@ def tick_get_ex_ori():
     df = param.ct.get_market_data_ex_ori(
         fields=[], stock_code=code, period='tick', start_time=param.tick_sub_day, subscribe=True
     )
-    
+
     for k in df.keys():
-        del df[k]['pvolume'],df[k]['lastSettlementPrice'],df[k]['settlementPrice'],df[k]['transactionNum'],df[k]['openInt']
-        del df[k]['stime'],df[k]['stockStatus']
+        del (
+            df[k]['pvolume'],
+            df[k]['lastSettlementPrice'],
+            df[k]['settlementPrice'],
+            df[k]['transactionNum'],
+            df[k]['openInt'],
+        )
+        del df[k]['stime'], df[k]['stockStatus']
         amx_ticks_pub.pub(
             json.dumps({'topic': "tick", "code": k[:6], "format": "data_ex_ori", 'data': df[k]}, cls=Py36JsonEncoder),
             routing_key='ticks',
